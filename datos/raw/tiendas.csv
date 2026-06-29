@@ -1,0 +1,61 @@
+id_tienda,nombre_tienda,ciudad,region,departamento,formato_tienda,fecha_apertura,estado_tienda
+T001,Tienda Pasto 001,Pasto,Sur,Narino,Marketplace hub,2021-01-11,Activa
+T002,Tienda Ibague 002,Ibague,Centro,Tolima,Outlet,2018-12-10,Activa
+T003,Tienda Bogota 003,Bogota,Centro,Cundinamarca,Centro comercial,2023-01-14,Activa
+T004,Tienda Santa Marta 004,Santa Marta,Caribe,Magdalena,Dark store,2018-05-15,Activa
+T005,Tienda Bucaramanga 005,Bucaramanga,Oriente,Santander,Calle,2022-05-27,Activa
+T006,Tienda Medellin 006,Medellin,Antioquia,Antioquia,Centro comercial,2023-08-17,Activa
+T007,Tienda Barranquilla 007,Barranquilla,Caribe,Atlantico,Marketplace hub,2024-04-19,Activa
+T008,Tienda Bogota 008,Bogota,Centro,Cundinamarca,Dark store,2021-11-23,Activa
+T009,Tienda Santa Marta 009,Santa Marta,Caribe,Magdalena,Calle,2018-01-03,Activa
+T010,Tienda Manizales 010,Manizales,Eje Cafetero,Caldas,Calle,2024-02-27,Activa
+T011,Tienda Cartagena 011,Cartagena,Caribe,Bolivar,Centro comercial,2022-08-25,Activa
+T012,Tienda Cali 012,Cali,Occidente,Valle del Cauca,Centro comercial,2019-04-27,Activa
+T013,Tienda Cali 013,Cali,Occidente,Valle del Cauca,Marketplace hub,2022-09-25,Activa
+T014,Tienda Cartagena 014,Cartagena,Caribe,Bolivar,Marketplace hub,2020-10-01,Activa
+T015,Tienda Bucaramanga 015,Bucaramanga,Oriente,Santander,Dark store,2019-08-27,Activa
+T016,Tienda Ibague 016,Ibague,Centro,Tolima,Outlet,2019-06-04,Activa
+T017,Tienda Barranquilla 017,Barranquilla,Caribe,Atlantico,Outlet,2018-09-14,Activa
+T018,Tienda Ibague 018,Ibague,Centro,Tolima,Dark store,2021-02-02,Activa
+T019,Tienda Medellin 019,Medellin,Antioquia,Antioquia,Centro comercial,2023-10-16,Activa
+T020,Tienda Manizales 020,Manizales,Eje Cafetero,Caldas,Centro comercial,2018-01-21,Activa
+T021,Tienda Cali 021,Cali,Occidente,Valle del Cauca,Calle,2022-07-29,Activa
+T022,Tienda Bogota 022,Bogota,Centro,Cundinamarca,Dark store,2023-07-05,Activa
+T023,Tienda Pereira 023,Pereira,Eje Cafetero,Risaralda,Marketplace hub,2022-04-23,Activa
+T024,Tienda Medellin 024,Medellin,Antioquia,Antioquia,Outlet,2023-05-31,Activa
+T025,Tienda Medellin 025,Medellin,Antioquia,Antioquia,Dark store,2020-11-15,Activa
+T026,Tienda Bogota 026,Bogota,Centro,Cundinamarca,Marketplace hub,2020-08-08,Activa
+T027,Tienda Cali 027,Cali,Occidente,Valle del Cauca,Dark store,2021-11-02,Activa
+T028,Tienda Medellin 028,Medellin,Antioquia,Antioquia,Dark store,2023-09-02,Activa
+T029,Tienda Bucaramanga 029,Bucaramanga,Oriente,Santander,Outlet,2020-12-01,Activa
+T030,Tienda Manizales 030,Manizales,Eje Cafetero,Caldas,Marketplace hub,2023-10-14,Activa
+T031,Tienda Bogota 031,Bogota,Centro,Cundinamarca,Dark store,2019-10-07,Activa
+T032,Tienda Villavicencio 032,Villavicencio,Llanos,Meta,Outlet,2022-10-06,Activa
+T033,Tienda Pereira 033,Pereira,Eje Cafetero,Risaralda,Calle,2023-07-05,Activa
+T034,Tienda Pereira 034,Pereira,Eje Cafetero,Risaralda,Marketplace hub,2022-02-11,Activa
+T035,Tienda Medellin 035,Medellin,Antioquia,Antioquia,Dark store,2019-04-26,Activa
+T036,Tienda Cartagena 036,Cartagena,Caribe,Bolivar,Dark store,2021-08-29,Activa
+T037,Tienda Barranquilla 037,Barranquilla,Caribe,Atlantico,Outlet,2019-05-10,Activa
+T038,Tienda Barranquilla 038,Barranquilla,Caribe,Atlantico,Calle,2020-10-24,Activa
+T039,Tienda Cartagena 039,Cartagena,Caribe,Bolivar,Marketplace hub,2020-11-18,Activa
+T040,Tienda Ibague 040,Ibague,Centro,Tolima,Calle,2021-07-03,Activa
+T041,Tienda Barranquilla 041,Barranquilla,Caribe,Atlantico,Calle,2019-01-29,Activa
+T042,Tienda Villavicencio 042,Villavicencio,Llanos,Meta,Centro comercial,2024-01-12,Activa
+T043,Tienda Pereira 043,Pereira,Eje Cafetero,Risaralda,Centro comercial,2022-02-15,Activa
+T044,Tienda Pasto 044,Pasto,Sur,Narino,Dark store,2023-03-17,Activa
+T045,Tienda Pasto 045,Pasto,Sur,Narino,Outlet,2021-12-28,En remodelacion
+T046,Tienda Pereira 046,Pereira,Eje Cafetero,Risaralda,Dark store,2022-05-22,Activa
+T047,Tienda Bucaramanga 047,Bucaramanga,Oriente,Santander,Dark store,2023-10-19,Activa
+T048,Tienda Medellin 048,Medellin,Antioquia,Antioquia,Calle,2021-03-14,Activa
+T049,Tienda Cartagena 049,Cartagena,Caribe,Bolivar,Outlet,2022-11-22,Activa
+T050,Tienda Cartagena 050,Cartagena,Caribe,Bolivar,Calle,2023-05-02,Activa
+T051,Tienda Cali 051,Cali,Occidente,Valle del Cauca,Centro comercial,2023-10-07,Activa
+T052,Tienda Bucaramanga 052,Bucaramanga,Oriente,Santander,Marketplace hub,2021-08-11,Activa
+T053,Tienda Pereira 053,Pereira,Eje Cafetero,Risaralda,Outlet,2020-09-26,Activa
+T054,Tienda Villavicencio 054,Villavicencio,Llanos,Meta,Marketplace hub,2024-03-11,Activa
+T055,Tienda Pereira 055,Pereira,Eje Cafetero,Risaralda,Centro comercial,2018-04-17,Activa
+T056,Tienda Cartagena 056,Cartagena,Caribe,Bolivar,Dark store,2021-06-29,Activa
+T057,Tienda Manizales 057,Manizales,Eje Cafetero,Caldas,Outlet,2019-04-22,Activa
+T058,Tienda Bogota 058,Bogota,Centro,Cundinamarca,Dark store,2022-05-19,Activa
+T059,Tienda Ibague 059,Ibague,Centro,Tolima,Dark store,2023-12-25,Activa
+T060,Tienda Pasto 060,Pasto,Sur,Narino,Centro comercial,2018-03-15,Activa
