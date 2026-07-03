@@ -1,4 +1,4 @@
-# Configuración de Lakehouse y conectividad externa mediante Shortcuts
+# Configuración de Lakehouse y conectividad mediante Shortcuts de OneLake
 
 ---
 
@@ -9,701 +9,699 @@
 | **Duración estimada** | 75 minutos |
 | **Complejidad** | Media |
 | **Nivel Bloom** | Aplicar (*Apply*) |
-| **Módulo** | Capítulo 1 — Fundamentos de Lakehouse en Microsoft Fabric |
-| **Dependencias** | Ninguna (es el primer laboratorio de la serie) |
-| **Produce artefactos para** | Lab 02, Lab 03, Lab 04, Lab 05 |
+| **Módulo** | Capítulo 1 - Fundamentos de Arquitectura en Fabric y OneLake |
+| **Dependencias** | Ninguna. Es el primer laboratorio de la serie. |
+| **Produce artefactos para** | Capítulos 2, 3, 4 y 5 |
 
 ---
 
-## 2. Descripción General
+## 2. Descripción general
 
-En este laboratorio configurarás los cimientos de toda la arquitectura de datos del curso. Comenzarás creando un **Workspace dedicado** en Microsoft Fabric con capacidad Trial habilitada y aprovisionar un **Lakehouse** siguiendo la estructura de carpetas de la arquitectura Medallion (Bronze / Silver / Gold). La parte central del laboratorio se enfoca en la creación de **Shortcuts** hacia fuentes externas en Azure Data Lake Storage Gen2 o Azure Blob Storage, configurando las credenciales de acceso mediante SAS Token. Finalizarás validando la conectividad ejecutando consultas SQL sobre los datos expuestos por los Shortcuts a través del **SQL Endpoint** del Lakehouse, sin haber copiado un solo byte de datos al almacenamiento de OneLake.
+En este laboratorio configurarás los cimientos de la arquitectura de datos del curso. Crearás un workspace de Microsoft Fabric con capacidad Trial, aprovisionarás dos Lakehouses y cargarás los datos del taller directamente en OneLake.
 
-> ⚠️ **DEPENDENCIA CRÍTICA:** Los artefactos creados en este laboratorio (Workspace, Lakehouse y Shortcuts) son consumidos por todos los laboratorios posteriores. **No elimines ningún recurso** al terminar esta práctica.
+Trabajarás con un Lakehouse de origen llamado `lh_ventas_fuente`, donde quedarán los archivos CSV del taller, y un Lakehouse analítico llamado `lh_ventas`, donde se construirá la arquitectura Medallion de los siguientes capítulos.
+
+También crearás un **shortcut interno de OneLake** para exponer los archivos del Lakehouse de origen desde el Lakehouse principal. Con esto comprobarás cómo OneLake permite acceder a datos entre artefactos de Fabric sin duplicar archivos manualmente.
+
+> **Dependencia crítica:** no elimines el workspace, los lakehouses, el shortcut ni los archivos cargados. Todos los laboratorios posteriores dependen de ellos.
 
 ---
 
-## 3. Objetivos de Aprendizaje
+## 3. Objetivos de aprendizaje
 
 Al completar este laboratorio serás capaz de:
 
-- [ ] Crear y configurar un Workspace de Microsoft Fabric con capacidad Trial habilitada y los permisos necesarios para soportar una arquitectura Medallion completa.
-- [ ] Aprovisionar un Lakehouse en Microsoft Fabric y organizar manualmente la estructura de carpetas para las capas Bronze, Silver y Gold dentro del área `Files`.
-- [ ] Crear Shortcuts hacia fuentes de datos externas (Azure Data Lake Storage Gen2 y/o Azure Blob Storage) para habilitar acceso federado sin duplicación de datos.
-- [ ] Validar la conectividad a los datos externos ejecutando consultas `SELECT` sobre los Shortcuts mediante el SQL Endpoint del Lakehouse.
+- Crear un workspace de Microsoft Fabric asociado a Trial.
+- Crear un Lakehouse de origen para almacenar archivos CSV en OneLake.
+- Crear un Lakehouse principal para implementar la arquitectura Medallion.
+- Cargar archivos CSV del taller en la zona de origen de OneLake.
+- Crear carpetas `Bronze` y `Shortcuts` en el Lakehouse principal.
+- Crear un shortcut interno de OneLake desde `lh_ventas` hacia `lh_ventas_fuente`.
+- Validar el acceso a los archivos mediante un notebook de Fabric.
+- Documentar la configuración base que se usará en los demás capítulos.
 
 ---
 
 ## 4. Prerrequisitos
 
-### Conocimientos previos
+### 4.1 Conocimientos previos
 
 | Área | Nivel requerido |
 |---|---|
-| Conceptos generales de Data Lake y almacenamiento en la nube | Básico |
-| Navegación en portales web (Azure Portal, Microsoft 365) | Básico |
-| SQL (sentencias `SELECT`, `FROM`, `WHERE`) | Básico |
-| Conceptos de arquitectura Medallion (Bronze / Silver / Gold) | Conceptual (cubierto en la lección teórica 1.1) |
+| Navegación en Microsoft Fabric | Básico |
+| Conceptos de Data Lake | Básico |
+| Conceptos de arquitectura Medallion | Conceptual |
+| SQL básico | Básico |
+| Notebooks / PySpark | Deseable, no obligatorio |
 
-### Acceso y credenciales necesarios
+### 4.2 Acceso requerido
 
 | Recurso | Detalle |
 |---|---|
-| **Tenant de Microsoft Fabric** | Trial activo (60 días) con permisos para crear Workspaces |
-| **Cuenta Microsoft / Azure AD** | Cuenta organizacional o cuenta personal con Fabric Trial activado |
-| **SAS Token o credenciales de Storage** | Proporcionados por el instructor. Deben incluir acceso de lectura a los contenedores de práctica |
-| **Archivos de datos de práctica** | Dataset del curso (v1.0) — cargado por el instructor en el Storage Account de demostración |
-| **Navegador web** | Microsoft Edge o Google Chrome versión 110 o superior |
+| Cuenta | Cuenta organizacional Microsoft Entra ID. |
+| Licencia | Power BI Pro y Fabric Trial activo. |
+| Permisos | Crear workspace o rol Contributor/Member en un workspace de práctica. |
+| Navegador | Microsoft Edge o Google Chrome actualizado. |
+| Datos | Carpeta `datos/raw` incluida en este repositorio. |
 
-> 📋 **Nota para el instructor:** Antes de iniciar el laboratorio, asegúrate de haber distribuido a cada estudiante:
-> - La URL del Storage Account (`https://<nombre_cuenta>.dfs.core.windows.net` o `https://<nombre_cuenta>.blob.core.windows.net`)
-> - El nombre del contenedor de práctica (por ejemplo: `ventas-raw`)
-> - Un SAS Token con permisos de lectura y listado (`rl`) con vigencia mínima de 30 días
-> - Los nombres de las carpetas dentro del contenedor que los estudiantes deben mapear como Shortcuts
+### 4.3 Material del laboratorio
+
+Antes de iniciar confirma que tienes acceso a la carpeta `datos/raw` del repositorio. Esa carpeta contiene los ocho archivos CSV que se cargarán en OneLake durante este capítulo.
 
 ---
 
-## 5. Entorno del Laboratorio
+## 5. Convenciones obligatorias del laboratorio
 
-### Hardware recomendado
+Usa los nombres exactos de esta tabla para evitar errores en los capítulos siguientes.
 
-| Componente | Mínimo | Recomendado |
-|---|---|---|
-| Procesador | Intel Core i5 8ª gen / AMD Ryzen 5 | Intel Core i7 / AMD Ryzen 7 |
-| Memoria RAM | 8 GB | 16 GB |
-| Almacenamiento libre | 2 GB | 5 GB |
-| Resolución de pantalla | 1366 × 768 | 1920 × 1080 |
-| Conexión a Internet | 10 Mbps | 25 Mbps |
+| Artefacto | Nombre |
+|---|---|
+| Workspace | `FABTRIAL_<alias>` |
+| Lakehouse de origen | `lh_ventas_fuente` |
+| Lakehouse principal | `lh_ventas` |
+| Shortcut | `sc_origen_ventas` |
+| Notebook de validación | `NB_01_Verificar_OneLake` |
+| Carpeta de origen | `Files/origen/ventas/raw` |
+| Carpeta de shortcut | `Files/Shortcuts/sc_origen_ventas` |
+| Carpeta Bronze | `Files/Bronze/raw` |
+| Carpeta Silver | `Files/Silver` |
+| Carpeta Gold | `Files/Gold` |
 
-### Software requerido
+> Sustituye `<alias>` por tus iniciales o usuario corto. Ejemplo: `FABTRIAL_JL`.
 
-| Software | Versión mínima | Uso en este lab |
-|---|---|---|
-| Microsoft Edge / Google Chrome | 110+ | Acceso al portal de Fabric |
-| Microsoft Fabric Portal | N/A (SaaS) | Creación de Workspace, Lakehouse y Shortcuts |
-| Power BI Desktop | Mayo 2024+ | No requerido en este lab (se usa en Lab 04) |
-| Azure Storage Explorer (opcional) | 1.34+ | Verificación visual del contenido del Storage Account |
+---
 
-### Configuración inicial del entorno
+## 6. Arquitectura que construirás
 
-Antes de comenzar los pasos del laboratorio, realiza las siguientes verificaciones:
+```text
+Workspace: FABTRIAL_<alias>
 
-**Verificación 1 — Confirmar acceso a Microsoft Fabric:**
+lh_ventas_fuente
+└── Files
+    └── origen
+        └── ventas
+            └── raw
+                ├── ventas_2024.csv
+                ├── ventas_2025.csv
+                ├── ventas_2026.csv
+                ├── productos.csv
+                ├── clientes.csv
+                ├── tiendas.csv
+                ├── fechas.csv
+                └── presupuesto.csv
 
-1. Abre tu navegador y navega a: `https://app.fabric.microsoft.com`
-2. Inicia sesión con tu cuenta organizacional o personal.
-3. Confirma que en la esquina superior derecha aparece el ícono de tu cuenta y que **no** ves un mensaje de "Fabric no disponible" o "Sin licencia".
-4. Si ves una pantalla de bienvenida con opción de "Iniciar prueba", activa el Trial haciendo clic en **Iniciar prueba gratuita** y sigue las instrucciones en pantalla.
-
-**Verificación 2 — Confirmar recepción de credenciales del instructor:**
-
-Antes de continuar, asegúrate de tener a mano (en un bloc de notas o documento de texto):
-
+lh_ventas
+├── Files
+│   ├── Landing
+│   ├── Bronze
+│   │   └── raw
+│   ├── Silver
+│   ├── Gold
+│   └── Shortcuts
+│       └── sc_origen_ventas  ->  lh_ventas_fuente/Files/origen/ventas/raw
+└── Tables
+    └── vacío al terminar este capítulo
 ```
-URL del Storage Account : https://_________________________.dfs.core.windows.net
-Nombre del contenedor   : _________________________
-SAS Token               : ?sv=2023-...&sig=...
-Carpeta Bronze          : ventas/bronze/ (o el nombre indicado por el instructor)
-Carpeta Silver          : ventas/silver/ (o el nombre indicado por el instructor)
-```
-
-> 💡 **Alternativa sin Azure Storage:** Si no cuentas con acceso a un Storage Account externo, el instructor puede proporcionarte URLs de SAS Token preconfiguradas para el storage de demostración del curso. En ese caso, usa exactamente las URLs proporcionadas en los pasos de creación de Shortcuts.
 
 ---
 
-## 6. Instrucciones Paso a Paso
+## 7. Procedimiento paso a paso
 
 ---
 
-### Paso 1 — Crear el Workspace de Microsoft Fabric
+### Paso 1 - Iniciar sesión y validar acceso a Fabric
 
-**Objetivo:** Aprovisionar un Workspace dedicado con capacidad Trial que servirá como contenedor de todos los artefactos del curso.
+**Objetivo:** confirmar que tu cuenta puede acceder a Microsoft Fabric y crear artefactos.
 
 #### Instrucciones
 
-1. Abre tu navegador y navega a `https://app.fabric.microsoft.com`. Inicia sesión si se te solicita.
-
-2. En el panel de navegación izquierdo, localiza el ícono de **Workspaces** (ícono de cuadrícula o carpetas apiladas) y haz clic en él.
-
-3. En la parte inferior del panel de Workspaces, haz clic en **+ Nuevo workspace**.
-
-4. En el panel de configuración del Workspace que aparece a la derecha, completa los campos:
-
-   | Campo | Valor |
-   |---|---|
-   | **Nombre** | `Fabric_MedallionLab_[TusIniciales]` (ejemplo: `Fabric_MedallionLab_JGR`) |
-   | **Descripción** | `Workspace del curso de arquitectura Medallion en Microsoft Fabric` |
-
-5. Expande la sección **Avanzado** (o **Licencia**) para verificar la configuración de capacidad:
-   - Selecciona **Trial** en el tipo de licencia.
-   - Si Trial no aparece como opción, selecciona **Fabric capacity** y elige la capacidad Trial disponible en el desplegable.
-
-6. Haz clic en **Aplicar** o **Crear**.
-
-7. Espera a que el Workspace se cree (generalmente menos de 10 segundos). Serás redirigido automáticamente al nuevo Workspace vacío.
+1. Abre Microsoft Edge o Google Chrome.
+2. Navega a `https://app.fabric.microsoft.com`.
+3. Inicia sesión con la cuenta asignada para el taller.
+4. En el menú izquierdo, confirma que puedes ver **Workspaces**.
+5. En la esquina superior derecha, abre el menú de tu cuenta.
+6. Verifica si aparece una indicación de Trial activo o capacidad Trial disponible.
+7. Si Fabric te ofrece iniciar una prueba, selecciona **Start trial** o **Iniciar prueba gratuita**.
+8. Espera a que Fabric confirme la activación.
 
 #### Resultado esperado
 
-- El Workspace aparece en el panel izquierdo con el nombre que asignaste.
-- La pantalla principal muestra un Workspace vacío con el mensaje "Este workspace no tiene contenido todavía" o similar.
-- En la URL del navegador aparece el ID del Workspace: `https://app.fabric.microsoft.com/groups/<workspace-id>/...`
+- Puedes acceder al portal de Fabric.
+- No aparece un mensaje de bloqueo por licencia.
+- Puedes crear o acceder a un workspace.
 
-#### Verificación
+#### Validación
 
-Confirma que el Workspace usa capacidad Trial:
+Antes de continuar, confirma:
 
-1. Haz clic en el ícono de configuración del Workspace (⚙️ engranaje) en la parte superior derecha, o accede a **Configuración del workspace** desde el menú `...` junto al nombre del workspace.
-2. En la sección **Licencia** o **Premium**, verifica que aparece **Trial** o **Fabric (Trial)** como tipo de capacidad.
-3. Si aparece **Pro** o **Free**, el Workspace no tiene capacidad Fabric habilitada. Contacta al instructor antes de continuar.
+- La sesión está iniciada con la cuenta asignada para el taller.
+- Fabric está disponible para crear artefactos.
+- Puedes crear o acceder al workspace del curso.
 
 ---
 
-### Paso 2 — Aprovisionar el Lakehouse principal
+### Paso 2 - Crear el workspace del curso
 
-**Objetivo:** Crear el Lakehouse `lh_ventas` que servirá como repositorio central de datos para todos los laboratorios del curso.
+**Objetivo:** crear un contenedor aislado para todos los artefactos del taller.
 
 #### Instrucciones
 
-1. Desde el Workspace recién creado, haz clic en el botón **+ Nuevo elemento** (o **+ New item**) en la parte superior de la pantalla.
+1. En el menú izquierdo de Fabric, selecciona **Workspaces**.
+2. Haz clic en **+ New workspace**.
+3. En **Name**, escribe:
 
-2. En el panel de selección de elementos, busca y selecciona **Lakehouse**.
-   - Si no ves la opción directamente, usa el campo de búsqueda y escribe "Lakehouse".
-   - Asegúrate de seleccionar **Lakehouse** (bajo la categoría *Data Engineering*), no *SQL Warehouse* ni *KQL Database*.
-
-3. En el cuadro de diálogo de creación, ingresa el nombre:
-
+   ```text
+   FABTRIAL_<alias>
    ```
+
+   Ejemplo:
+
+   ```text
+   FABTRIAL_JL
+   ```
+
+4. En la sección de licencia o capacidad, selecciona **Trial** si aparece disponible.
+5. Deja las demás opciones por defecto.
+6. Selecciona **Apply** o **Create**.
+7. Espera a que el workspace aparezca en la lista.
+8. Abre el workspace recién creado.
+
+   ![Workspace](../images/Capitulo1/1.png)
+
+#### Resultado esperado
+
+El workspace `FABTRIAL_<alias>` existe y está asociado a una capacidad Trial.
+
+#### Validación
+
+1. Dentro del workspace, selecciona **Workspace settings**.
+2. Revisa la sección **License info** o **Capacity**.
+3. Confirma que el workspace no está en modo Power BI Pro puro, sino asociado a Fabric Trial.
+
+---
+
+### Paso 3 - Crear el Lakehouse de origen `lh_ventas_fuente`
+
+**Objetivo:** crear una ubicación de origen dentro de OneLake para cargar los CSV del curso.
+
+#### Instrucciones
+
+1. Dentro del workspace `FABTRIAL_<alias>`, selecciona **+ New item**.
+2. En el buscador, escribe **Lakehouse**.
+3. Selecciona **Lakehouse**.
+4. En **Name**, escribe exactamente:
+
+   ```text
+   lh_ventas_fuente
+   ```
+
+5. Selecciona **Create**.
+6. Espera a que Fabric aprovisione el Lakehouse.
+7. Verifica que el explorador del Lakehouse muestra las secciones **Tables** y **Files**.
+
+#### Resultado esperado
+
+Existe el Lakehouse `lh_ventas_fuente`.
+
+#### Validación
+
+El panel izquierdo del Lakehouse muestra:
+
+```text
+Tables
+Files
+```
+
+Si no aparece **Files**, espera unos segundos y actualiza la página.
+
+---
+
+### Paso 4 - Crear la ruta de origen en OneLake
+
+**Objetivo:** preparar la carpeta donde cargarás los archivos CSV del taller.
+
+#### Instrucciones
+
+1. En `lh_ventas_fuente`, expande **Files**.
+2. Haz clic en los tres puntos de **Files** o clic derecho sobre **Files**.
+3. Selecciona **New folder**.
+4. Crea la carpeta:
+
+   ```text
+   origen
+   ```
+
+5. Dentro de `origen`, crea la carpeta:
+
+   ```text
+   ventas
+   ```
+
+6. Dentro de `ventas`, crea la carpeta:
+
+   ```text
+   raw
+   ```
+
+#### Resultado esperado
+
+La estructura queda así:
+
+```text
+lh_ventas_fuente
+└── Files
+    └── origen
+        └── ventas
+            └── raw
+```
+
+#### Validación
+
+Navega hasta `Files/origen/ventas/raw` y confirma que estás ubicado en una carpeta vacía lista para recibir archivos.
+
+---
+
+### Paso 5 - Cargar los datos del taller en OneLake
+
+**Objetivo:** importar los datos del repositorio hacia el Lakehouse de origen.
+
+#### Instrucciones
+
+1. En tu equipo local, abre la carpeta del repositorio del taller.
+2. Ubica la ruta:
+
+   ```text
+   datos/raw
+   ```
+
+3. Confirma que contiene estos archivos:
+
+   ```text
+   ventas_2024.csv
+   ventas_2025.csv
+   ventas_2026.csv
+   productos.csv
+   clientes.csv
+   tiendas.csv
+   fechas.csv
+   presupuesto.csv
+   ```
+
+4. Regresa a Fabric y asegúrate de estar en:
+
+   ```text
+   lh_ventas_fuente > Files > origen > ventas > raw
+   ```
+
+5. Selecciona **Upload**.
+6. Selecciona **Upload files**.
+7. Carga los ocho archivos CSV de `datos/raw`.
+8. Espera a que la carga finalice.
+9. Si Fabric muestra barra de progreso por archivo, confirma que todos terminan sin error.
+
+![Carpetas](../images/Capitulo1/2.png)
+
+#### Resultado esperado
+
+Los ocho archivos CSV aparecen dentro de `Files/origen/ventas/raw`.
+
+#### Validación
+
+Verifica que ves exactamente estos archivos:
+
+| Archivo | Filas esperadas |
+|---|---:|
+| `ventas_2024.csv` | 67.987 |
+| `ventas_2025.csv` | 67.401 |
+| `ventas_2026.csv` | 31.354 |
+| `productos.csv` | 500 |
+| `clientes.csv` | 5.000 |
+| `tiendas.csv` | 60 |
+| `fechas.csv` | 904 |
+| `presupuesto.csv` | 14.400 |
+
+> En este punto solo validas que los archivos existen. Los conteos se validarán con Spark en el paso 10.
+
+---
+
+### Paso 6 - Crear el Lakehouse principal `lh_ventas`
+
+**Objetivo:** crear el Lakehouse donde se implementará la arquitectura Medallion.
+
+#### Instrucciones
+
+1. Regresa al workspace `FABTRIAL_<alias>`.
+2. Selecciona **+ New item**.
+3. Busca **Lakehouse**.
+4. Selecciona **Lakehouse**.
+5. En **Name**, escribe exactamente:
+
+   ```text
    lh_ventas
    ```
 
-4. Haz clic en **Crear**.
-
-5. Espera a que Fabric aprovisione el Lakehouse. Este proceso toma entre 15 y 45 segundos. Verás una pantalla de carga con el mensaje "Creando Lakehouse..." o similar.
-
-6. Una vez completado, serás redirigido automáticamente al explorador del Lakehouse `lh_ventas`.
+6. Selecciona **Create**.
+7. Espera a que Fabric cree el Lakehouse.
 
 #### Resultado esperado
 
-- La interfaz del Lakehouse muestra dos secciones principales en el panel izquierdo:
-  - **Tables** — donde se almacenarán las tablas Delta Lake.
-  - **Files** — donde se almacenarán archivos sin procesar y Shortcuts.
-- En la parte superior de la pantalla aparece el nombre `lh_ventas`.
-- En el panel de navegación del Workspace (izquierda), aparecen dos artefactos nuevos: `lh_ventas` (Lakehouse) y `lh_ventas SQL analytics endpoint` (SQL Endpoint).
+Existe el Lakehouse `lh_ventas`, separado de `lh_ventas_fuente`.
 
-#### Verificación
+#### Validación
 
-1. Confirma que en el explorador del Lakehouse puedes ver las carpetas `Tables` y `Files` en el panel izquierdo.
-2. Haz clic en `Tables` — debe estar vacía (sin tablas aún).
-3. Haz clic en `Files` — debe estar vacía (sin archivos ni subcarpetas aún).
-4. En la esquina superior derecha del explorador del Lakehouse, verifica que existe un botón o enlace que dice **SQL analytics endpoint** — esto confirma que el endpoint fue aprovisionado automáticamente.
+En el workspace deben verse dos elementos Lakehouse:
+
+```text
+lh_ventas_fuente
+lh_ventas
+```
 
 ---
 
-### Paso 3 — Crear la estructura de carpetas Medallion en la sección Files
+### Paso 7 - Crear la estructura Medallion en `lh_ventas`
 
-**Objetivo:** Organizar manualmente la estructura de directorios dentro de la carpeta `Files` del Lakehouse siguiendo el patrón Medallion (Bronze / Silver / Gold) para establecer las convenciones de almacenamiento del curso.
+**Objetivo:** preparar carpetas de trabajo para Landing, Bronze, Silver y Gold.
 
 #### Instrucciones
 
-1. Desde el explorador del Lakehouse `lh_ventas`, asegúrate de estar en la vista **Lakehouse** (no en SQL Endpoint). Verifica esto en el selector de vista en la parte superior derecha.
+1. Abre el Lakehouse `lh_ventas`.
+2. Expande **Files**.
+3. Crea estas carpetas al mismo nivel dentro de **Files**:
 
-2. En el panel izquierdo, haz clic derecho sobre la carpeta **Files**.
-
-3. En el menú contextual, selecciona **Nueva subcarpeta** (o **New subfolder**).
-
-4. Escribe el nombre `Bronze` y presiona **Enter** o haz clic en **Crear**.
-
-5. Repite los pasos 2-4 para crear las carpetas:
-   - `Silver`
-   - `Gold`
-
-6. Dentro de la carpeta `Bronze`, crea las siguientes subcarpetas para organizar los datos por dominio:
-   - Haz clic derecho sobre `Bronze` → **Nueva subcarpeta** → `ventas`
-   - Haz clic derecho sobre `Bronze` → **Nueva subcarpeta** → `productos`
-   - Haz clic derecho sobre `Bronze` → **Nueva subcarpeta** → `clientes`
-
-7. La estructura final en `Files` debe quedar así:
-
+   ```text
+   Landing
+   Bronze
+   Silver
+   Gold
+   Shortcuts
    ```
-   Files/
-   ├── Bronze/
-   │   ├── ventas/
-   │   ├── productos/
-   │   └── clientes/
-   ├── Silver/
-   └── Gold/
+
+4. Dentro de `Bronze`, crea la subcarpeta:
+
+   ```text
+   raw
    ```
+
+5. Dentro de `Silver`, crea la subcarpeta:
+
+   ```text
+   control
+   ```
+
+6. Dentro de `Gold`, crea la subcarpeta:
+
+   ```text
+   control
+   ```
+
+![Carpetas](../images/Capitulo1/3.png)
 
 #### Resultado esperado
 
-- El panel izquierdo del explorador del Lakehouse muestra la jerarquía de carpetas bajo `Files`.
-- Las carpetas `Bronze`, `Silver` y `Gold` aparecen como subdirectorios de `Files`.
-- Dentro de `Bronze` se visualizan tres subcarpetas: `ventas`, `productos` y `clientes`.
+La estructura principal queda así:
 
-#### Verificación
+```text
+lh_ventas
+└── Files
+    ├── Bronze
+    │   └── raw
+    ├── Shortcuts
+```
 
-1. Haz clic en cada carpeta para confirmar que se creó correctamente y está vacía.
-2. Verifica que los nombres de las carpetas están escritos correctamente (respetan mayúsculas/minúsculas): `Bronze`, `Silver`, `Gold`.
+#### Validación
 
-> 📝 **Convención de nombres:** A lo largo del curso usaremos esta estructura de carpetas como referencia. Los pipelines del Lab 02 depositarán datos en `Bronze/ventas/`, los Notebooks del Lab 03 leerán desde `Bronze/` y escribirán en `Silver/`, y así sucesivamente.
+Confirma que los nombres respetan mayúsculas y minúsculas y que las carpetas están vacías. No agregues archivos todavía.
 
 ---
 
-### Paso 4 — Crear el primer Shortcut hacia Azure Data Lake Storage Gen2 (capa Bronze)
+### Paso 8 - Crear el shortcut interno de OneLake
 
-**Objetivo:** Configurar un Shortcut que apunte al contenedor de datos de ventas en ADLS Gen2 proporcionado por el instructor, habilitando acceso federado a los datos sin copiarlos a OneLake.
+**Objetivo:** conectar `lh_ventas` con los archivos de `lh_ventas_fuente` sin copiar los datos.
 
 #### Instrucciones
 
-1. Desde el explorador del Lakehouse `lh_ventas`, en el panel izquierdo, haz clic derecho sobre la carpeta **Files**.
+1. En el Lakehouse `lh_ventas`, ubícate en:
 
-   > 💡 También puedes crear el Shortcut dentro de una subcarpeta específica. Para este ejercicio lo crearemos directamente bajo `Files` para mayor visibilidad.
-
-2. En el menú contextual, selecciona **Nuevo Shortcut** (o **New shortcut**).
-
-3. En el panel de selección de origen del Shortcut, verás las opciones disponibles:
-   - **Microsoft OneLake** (interno)
-   - **Azure Data Lake Storage Gen2**
-   - **Azure Blob Storage**
-   - **Amazon S3**
-   - **Google Cloud Storage**
-   - **Dataverse**
-
-   Selecciona **Azure Data Lake Storage Gen2**.
-
-4. En la pantalla de configuración de conexión, completa los campos con los datos proporcionados por el instructor:
-
-   | Campo | Valor |
-   |---|---|
-   | **URL** | `https://<nombre_cuenta>.dfs.core.windows.net` |
-   | **Tipo de autenticación** | Selecciona **Shared Access Signature (SAS)** |
-   | **Token SAS** | Pega el SAS Token proporcionado por el instructor (comienza con `?sv=` o `sv=`) |
-
-   > ⚠️ **Importante:** El SAS Token debe tener permisos de **lectura (r)** y **listado (l)** sobre el contenedor. Si el token comienza con `?`, omite el signo de interrogación al pegarlo si el campo ya lo incluye, o inclúyelo si el campo espera la cadena completa.
-
-5. Haz clic en **Siguiente** (o **Next**).
-
-6. Fabric validará las credenciales y mostrará el explorador de contenedores del Storage Account. Navega hasta el contenedor indicado por el instructor (por ejemplo: `ventas-raw`).
-
-7. Dentro del contenedor, navega hasta la carpeta de datos de ventas (por ejemplo: `ventas/bronze/` o la ruta indicada por el instructor).
-
-8. Selecciona la carpeta que deseas mapear como Shortcut.
-
-9. En el campo **Nombre del Shortcut**, escribe:
-   ```
-   raw_ventas_ext
+   ```text
+   Files > Shortcuts
    ```
 
-10. Haz clic en **Crear** (o **Create**).
+2. Haz clic derecho sobre la carpeta `Shortcuts`.
+3. Selecciona **New shortcut**.
+4. En el panel de origen, selecciona **Microsoft OneLake**.
+5. Si Fabric muestra categorías, selecciona **Internal sources** o **OneLake**.
+6. En la lista de workspaces, selecciona:
 
-11. Espera a que Fabric valide y cree el Shortcut (5-15 segundos).
+   ```text
+   FABTRIAL_<alias>
+   ```
+
+7. Selecciona el Lakehouse:
+
+   ```text
+   lh_ventas_fuente
+   ```
+
+8. Navega hasta la ruta:
+
+   ```text
+   Files/origen/ventas/raw
+   ```
+
+9. En **Shortcut name**, escribe exactamente:
+
+   ```text
+   sc_origen_ventas
+   ```
+
+10. Selecciona **Create**.
+11. Espera la confirmación de Fabric.
+
+![Shortcut](../images/Capitulo1/4.png)
 
 #### Resultado esperado
 
-- En el explorador del Lakehouse, bajo `Files`, aparece una nueva entrada llamada `raw_ventas_ext` con un ícono especial que indica que es un Shortcut (generalmente una flecha curva o un ícono de enlace, diferente al ícono de carpeta normal).
-- Al hacer clic en `raw_ventas_ext`, se muestran los archivos del contenedor externo como si estuvieran almacenados localmente en el Lakehouse.
-- Los archivos de datos (CSV, Parquet, etc.) son visibles en el panel derecho del explorador.
+En `lh_ventas`, dentro de `Files/Shortcuts`, aparece una carpeta con icono de shortcut llamada:
 
-#### Verificación
+```text
+sc_origen_ventas
+```
 
-1. Haz clic en el Shortcut `raw_ventas_ext` para expandirlo.
-2. Confirma que puedes ver los archivos de datos del instructor (archivos `.csv` o `.parquet` con nombres relacionados a ventas).
-3. Si el Shortcut aparece con un ícono de error (❌) o no muestra contenido, verifica las credenciales y consulta la sección de **Solución de Problemas** al final de este laboratorio.
+Al abrirla, puedes ver los mismos ocho archivos CSV que cargaste en `lh_ventas_fuente`.
+
+#### Validación
+
+1. Abre `sc_origen_ventas`.
+2. Confirma que aparecen los archivos CSV.
+3. Regresa a `lh_ventas_fuente` y verifica que los archivos siguen en su ubicación original.
+4. Esto confirma que el shortcut no movió los datos.
 
 ---
 
-### Paso 5 — Crear el segundo Shortcut hacia Azure Blob Storage (datos de referencia)
+### Paso 9 - Crear el notebook de validación `NB_01_Verificar_OneLake`
 
-**Objetivo:** Configurar un segundo Shortcut apuntando a datos de referencia (catálogo de productos o clientes) almacenados en Azure Blob Storage, demostrando la capacidad de conectar múltiples fuentes heterogéneas desde un mismo Lakehouse.
+**Objetivo:** comprobar con Spark que el shortcut se puede leer desde el Lakehouse principal.
 
 #### Instrucciones
 
-1. Desde el explorador del Lakehouse `lh_ventas`, haz clic derecho sobre la carpeta **Files** → **Nuevo Shortcut**.
+1. Regresa al workspace `FABTRIAL_<alias>`.
+2. Selecciona **+ New item**.
+3. Busca y selecciona **Notebook**.
+4. En el nombre del notebook, escribe:
 
-2. En el panel de selección de origen, selecciona **Azure Blob Storage**.
-
-3. Completa los campos de conexión con los datos del segundo recurso de almacenamiento proporcionado por el instructor:
-
-   | Campo | Valor |
-   |---|---|
-   | **URL** | `https://<nombre_cuenta>.blob.core.windows.net` |
-   | **Tipo de autenticación** | **Shared Access Signature (SAS)** |
-   | **Token SAS** | SAS Token del segundo recurso (proporcionado por el instructor) |
-
-   > 📝 **Nota:** Si el instructor solo proporcionó un Storage Account, usa el mismo Storage Account pero apuntando a un contenedor diferente (por ejemplo: `productos-ref` o `clientes-ref`). Si se usa el mismo Storage Account, selecciona **Azure Data Lake Storage Gen2** nuevamente con las mismas credenciales pero navegando a un contenedor diferente.
-
-4. Haz clic en **Siguiente**.
-
-5. Navega hasta el contenedor de datos de referencia indicado por el instructor (por ejemplo: `productos-ref`).
-
-6. Selecciona la carpeta raíz del contenedor o la carpeta específica indicada.
-
-7. En el campo **Nombre del Shortcut**, escribe:
-   ```
-   raw_productos_ext
+   ```text
+   NB_01_Verificar_OneLake
    ```
 
-8. Haz clic en **Crear**.
+5. En el panel izquierdo del notebook, selecciona **Add lakehouse**.
+6. Elige **Existing lakehouse**.
+7. Selecciona:
+
+   ```text
+   lh_ventas
+   ```
+
+8. Confirma que `lh_ventas` queda como Lakehouse adjunto al notebook.
 
 #### Resultado esperado
 
-- Bajo `Files`, aparece un segundo Shortcut llamado `raw_productos_ext` con el mismo ícono de enlace.
-- Al expandirlo, se visualizan los archivos de referencia de productos o clientes del Storage Account externo.
-- Ambos Shortcuts (`raw_ventas_ext` y `raw_productos_ext`) coexisten bajo `Files` sin conflictos.
+El notebook existe y tiene `lh_ventas` como Lakehouse asociado.
 
-#### Verificación
+#### Validación
 
-1. Confirma que ambos Shortcuts son visibles bajo `Files` en el panel izquierdo.
-2. Haz clic en cada uno para verificar que muestran contenido diferente correspondiente a sus fuentes respectivas.
-3. La estructura del explorador del Lakehouse debe verse similar a:
-
-   ```
-   Files/
-   ├── Bronze/
-   │   ├── ventas/
-   │   ├── productos/
-   │   └── clientes/
-   ├── Silver/
-   ├── Gold/
-   ├── raw_ventas_ext     ← Shortcut (ícono de flecha/enlace)
-   └── raw_productos_ext  ← Shortcut (ícono de flecha/enlace)
-   ```
+En la parte izquierda del notebook debe aparecer `lh_ventas`. Si no aparece, usa **Add data items** para agregarlo.
 
 ---
 
-### Paso 6 — Explorar los datos del Shortcut desde el SQL Endpoint
+### Paso 10 - Validar conteos desde Spark
 
-**Objetivo:** Utilizar el SQL Endpoint del Lakehouse para ejecutar consultas SQL sobre los datos accedidos mediante los Shortcuts, verificando que la conectividad funciona correctamente sin necesidad de copiar los datos.
+**Objetivo:** leer los archivos CSV a través del shortcut y validar conteos esperados.
 
 #### Instrucciones
 
-1. En la parte superior derecha del explorador del Lakehouse, haz clic en el selector de vista y selecciona **SQL analytics endpoint** (o accede desde el Workspace haciendo clic en `lh_ventas SQL analytics endpoint`).
+1. En el notebook `NB_01_Verificar_OneLake`, crea una celda de código.
+2. Copia y ejecuta el siguiente código:
 
-2. La interfaz cambia al editor SQL del Endpoint. En el panel izquierdo verás las tablas y esquemas disponibles.
+```python
+from pyspark.sql import functions as F
 
-   > 📝 **Nota:** Los Shortcuts bajo `Files` no aparecen automáticamente como tablas SQL. Para consultarlos mediante SQL necesitas referenciarlos con funciones de lectura o crear tablas externas. En este paso usaremos el Notebook de Spark para la validación principal. Sin embargo, si los Shortcuts apuntan a carpetas con archivos **Delta Lake** (formato `.parquet` + `_delta_log`), sí pueden aparecer como tablas en el SQL Endpoint.
+base_path = "Files/Shortcuts/sc_origen_ventas"
 
-3. En el editor SQL, escribe la siguiente consulta para verificar el estado del endpoint y listar los esquemas disponibles:
+archivos = {
+    "ventas": ("ventas_*.csv", 166742),
+    "productos": ("productos.csv", 500),
+    "clientes": ("clientes.csv", 5000),
+    "tiendas": ("tiendas.csv", 60),
+    "fechas": ("fechas.csv", 904),
+    "presupuesto": ("presupuesto.csv", 14400),
+}
 
-   ```sql
-   -- Verificar los esquemas disponibles en el Lakehouse
-   SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-   FROM INFORMATION_SCHEMA.TABLES
-   ORDER BY TABLE_SCHEMA, TABLE_NAME;
-   ```
+resultados = []
 
-4. Haz clic en **Ejecutar** (▶️) o presiona `F5`.
+for nombre, (patron, esperado) in archivos.items():
+    ruta = f"{base_path}/{patron}"
+    df = spark.read.option("header", True).option("inferSchema", True).csv(ruta)
+    filas = df.count()
+    estado = "OK" if filas == esperado else "REVISAR"
+    resultados.append((nombre, ruta, filas, esperado, estado))
 
-5. Observa los resultados. En este punto el Lakehouse no tiene tablas Delta Lake creadas aún (eso ocurrirá en Labs 02 y 03), por lo que el resultado puede estar vacío o mostrar solo el esquema `dbo`.
+schema = "dominio string, ruta string, filas_obtenidas long, filas_esperadas long, estado string"
+df_resultados = spark.createDataFrame(resultados, schema)
+display(df_resultados)
 
-6. Para explorar los archivos del Shortcut directamente desde el SQL Endpoint usando `OPENROWSET`, ejecuta la siguiente consulta adaptada a los archivos de tu Shortcut:
+errores = [r for r in resultados if r[4] != "OK"]
+if errores:
+    raise Exception(f"Validacion con errores: {errores}")
 
-   > ⚠️ **Importante:** La función `OPENROWSET` puede no estar disponible en todos los SQL Endpoints de Fabric en versiones actuales. Si obtienes un error de función no reconocida, salta al **Paso 7** donde se realiza la validación completa desde un Notebook de Spark.
-
-   ```sql
-   -- Consultar archivos CSV desde el Shortcut usando OPENROWSET
-   -- Ajusta el path según el nombre de tu Shortcut y los archivos disponibles
-   SELECT TOP 10 *
-   FROM OPENROWSET(
-       BULK 'Files/raw_ventas_ext/*.csv',
-       FORMAT = 'CSV',
-       HEADER_ROW = TRUE
-   ) AS datos_ventas;
-   ```
-
-7. Si los archivos son de formato Parquet, usa:
-
-   ```sql
-   -- Consultar archivos Parquet desde el Shortcut
-   SELECT TOP 10 *
-   FROM OPENROWSET(
-       BULK 'Files/raw_ventas_ext/*.parquet',
-       FORMAT = 'PARQUET'
-   ) AS datos_ventas;
-   ```
-
-8. Ejecuta la consulta y observa los resultados en el panel inferior.
+print("Validacion correcta: el shortcut interno de OneLake puede leerse desde Spark.")
+```
+![Validación](../images/Capitulo1/5.png)
 
 #### Resultado esperado
 
-- La consulta `INFORMATION_SCHEMA.TABLES` retorna un resultado (posiblemente vacío si no hay tablas Delta aún, lo cual es esperado en este punto).
-- Si `OPENROWSET` está disponible y los archivos son accesibles, la consulta retorna las primeras 10 filas del dataset de ventas con las columnas del archivo CSV/Parquet.
-- Si `OPENROWSET` no está disponible, el sistema retorna un mensaje de error de sintaxis — esto es normal y la validación se completa en el siguiente paso con Spark.
+La tabla de resultados muestra estado `OK` para todos los dominios.
 
-#### Verificación
+```text
+ventas       166742  OK
+productos       500  OK
+clientes       5000  OK
+tiendas          60  OK
+fechas          904  OK
+presupuesto   14400  OK
+```
 
-- Confirma que el SQL Endpoint responde a consultas sin errores de conectividad.
-- Si `OPENROWSET` funcionó, documenta los nombres de las columnas retornadas para usarlos en el Lab 03.
+#### Validación
 
----
+Antes de continuar, confirma:
 
-### Paso 7 — Validar la conectividad del Shortcut desde un Notebook de Spark
-
-**Objetivo:** Confirmar de forma definitiva que los Shortcuts están correctamente configurados ejecutando código PySpark que lee los datos externos y muestra las primeras filas del dataset.
-
-#### Instrucciones
-
-1. Regresa a la vista **Lakehouse** del `lh_ventas` (usa el selector de vista en la parte superior).
-
-2. En el menú superior o desde el botón **+ Nuevo elemento** del Workspace, crea un nuevo **Notebook**:
-   - Haz clic en **Abrir Notebook** → **Nuevo Notebook**, o bien
-   - Ve al Workspace → **+ Nuevo elemento** → **Notebook**.
-
-3. En el Notebook, asegúrate de que el Lakehouse `lh_ventas` está adjunto como fuente de datos. Si no lo está:
-   - En el panel izquierdo del Notebook, haz clic en **Agregar Lakehouse** (o el ícono de base de datos).
-   - Selecciona **Lakehouse existente** → elige `lh_ventas` → **Agregar**.
-
-4. En la primera celda del Notebook, escribe y ejecuta el siguiente código para verificar el Shortcut de ventas:
-
-   ```python
-   # Celda 1: Verificar acceso al Shortcut raw_ventas_ext
-   # El Shortcut se accede con la misma ruta que cualquier carpeta de Files
-   
-   ruta_shortcut_ventas = "Files/raw_ventas_ext/"
-   
-   # Listar los archivos disponibles en el Shortcut
-   archivos = mssparkutils.fs.ls(ruta_shortcut_ventas)
-   
-   print(f"Archivos encontrados en el Shortcut 'raw_ventas_ext': {len(archivos)}")
-   for archivo in archivos:
-       print(f"  - {archivo.name} | Tamaño: {archivo.size} bytes | Es directorio: {archivo.isDir}")
-   ```
-
-5. Haz clic en el botón **Ejecutar celda** (▶️) o presiona `Shift + Enter`.
-
-   > ⏳ **Nota:** La primera ejecución puede tardar entre 1 y 5 minutos mientras se inicializa el clúster Spark. Verás el mensaje "Iniciando sesión de Spark..." — esto es normal.
-
-6. Una vez completada la ejecución, agrega una nueva celda y escribe el siguiente código para leer los datos:
-
-   ```python
-   # Celda 2: Leer el dataset de ventas desde el Shortcut
-   # Fabric resuelve el Shortcut en tiempo real; los datos NO se copian a OneLake
-   
-   ruta_shortcut_ventas = "Files/raw_ventas_ext/"
-   
-   # Detectar el formato de los archivos (ajustar si son .parquet)
-   df_ventas = spark.read.format("csv") \
-       .option("header", "true") \
-       .option("inferSchema", "true") \
-       .option("encoding", "UTF-8") \
-       .load(ruta_shortcut_ventas)
-   
-   # Mostrar las primeras 5 filas para confirmar conectividad
-   print(f"Total de registros leídos: {df_ventas.count()}")
-   print(f"Número de columnas: {len(df_ventas.columns)}")
-   print(f"Columnas detectadas: {df_ventas.columns}")
-   df_ventas.show(5, truncate=False)
-   ```
-
-7. Si los archivos del Shortcut son formato Parquet en lugar de CSV, usa esta versión:
-
-   ```python
-   # Celda 2 (alternativa para archivos Parquet):
-   ruta_shortcut_ventas = "Files/raw_ventas_ext/"
-   
-   df_ventas = spark.read.format("parquet") \
-       .load(ruta_shortcut_ventas)
-   
-   print(f"Total de registros leídos: {df_ventas.count()}")
-   df_ventas.show(5, truncate=False)
-   ```
-
-8. Agrega una tercera celda para validar el segundo Shortcut:
-
-   ```python
-   # Celda 3: Verificar el Shortcut raw_productos_ext
-   
-   ruta_shortcut_productos = "Files/raw_productos_ext/"
-   
-   df_productos = spark.read.format("csv") \
-       .option("header", "true") \
-       .option("inferSchema", "true") \
-       .load(ruta_shortcut_productos)
-   
-   print(f"Total de registros de productos: {df_productos.count()}")
-   df_productos.show(5, truncate=False)
-   ```
-
-9. Ejecuta todas las celdas haciendo clic en **Ejecutar todo** (▶▶) en el menú superior del Notebook.
-
-10. Una vez completada la ejecución, **guarda el Notebook** con el nombre:
-    ```
-    nb_validacion_shortcuts
-    ```
-    Usa `Ctrl + S` o el botón **Guardar** en la barra superior.
-
-#### Resultado esperado
-
-- **Celda 1:** Lista los archivos del Shortcut con sus nombres y tamaños. Ejemplo de salida:
-  ```
-  Archivos encontrados en el Shortcut 'raw_ventas_ext': 3
-    - ventas_2023_Q1.csv | Tamaño: 245760 bytes | Es directorio: False
-    - ventas_2023_Q2.csv | Tamaño: 312448 bytes | Es directorio: False
-    - ventas_2023_Q3.csv | Tamaño: 289792 bytes | Es directorio: False
-  ```
-
-- **Celda 2:** Muestra el conteo total de registros, los nombres de las columnas detectadas automáticamente y las primeras 5 filas del dataset de ventas. Ejemplo:
-  ```
-  Total de registros leídos: 15420
-  Número de columnas: 8
-  Columnas detectadas: ['fecha_venta', 'id_producto', 'id_cliente', 'cantidad', 'precio_unitario', 'descuento', 'region', 'canal_venta']
-  +------------+-----------+-----------+--------+----------------+---------+--------+------------+
-  |fecha_venta |id_producto|id_cliente |cantidad|precio_unitario |descuento|region  |canal_venta |
-  +------------+-----------+-----------+--------+----------------+---------+--------+------------+
-  |2023-01-05  |PROD-001   |CLI-00234  |2       |150.00          |0.05     |Norte   |Online      |
-  ...
-  ```
-
-- **Celda 3:** Muestra el conteo y primeras filas del catálogo de productos.
-
-#### Verificación
-
-- Confirma que **ninguna celda** termina con un error rojo.
-- Verifica que el conteo de registros es mayor a 0 en ambos Shortcuts.
-- Confirma que los nombres de las columnas tienen sentido para el dominio de ventas (fechas, IDs, cantidades, precios).
+- El notebook se ejecutó sin error.
+- La tabla `df_resultados` muestra todos los estados en `OK`.
+- El shortcut `sc_origen_ventas` existe y permite consultar los archivos esperados.
 
 ---
 
-## 7. Validación General del Laboratorio
+### Paso 11 - Documentar la configuración final
 
-Una vez completados todos los pasos, realiza las siguientes verificaciones finales para confirmar que el laboratorio fue completado exitosamente:
+**Objetivo:** dejar registradas las rutas que se usarán en los demás capítulos.
 
-### Lista de verificación final
+Completa esta tabla en tus notas:
 
-| # | Verificación | Cómo confirmar | ✅ / ❌ |
-|---|---|---|---|
-| 1 | Workspace creado con capacidad Trial | Configuración del Workspace → Licencia muestra "Trial" | |
-| 2 | Lakehouse `lh_ventas` aprovisionado | Visible en el Workspace con ícono de Lakehouse | |
-| 3 | SQL Endpoint aprovisionado automáticamente | `lh_ventas SQL analytics endpoint` visible en el Workspace | |
-| 4 | Estructura de carpetas Medallion creada | `Files/Bronze/`, `Files/Silver/`, `Files/Gold/` visibles en el explorador | |
-| 5 | Subcarpetas `ventas`, `productos`, `clientes` bajo `Bronze/` | Expandir `Bronze` en el explorador del Lakehouse | |
-| 6 | Shortcut `raw_ventas_ext` creado y funcional | Visible en `Files/` con ícono de Shortcut; muestra archivos al expandir | |
-| 7 | Shortcut `raw_productos_ext` creado y funcional | Visible en `Files/` con ícono de Shortcut; muestra archivos al expandir | |
-| 8 | Notebook `nb_validacion_shortcuts` ejecutado sin errores | Todas las celdas muestran resultados verdes en el historial de ejecución | |
-| 9 | Datos leídos desde Shortcuts muestran registros reales | `df_ventas.count()` > 0 y `df_productos.count()` > 0 | |
-
-### Resumen de artefactos creados
-
-Al finalizar este laboratorio, tu Workspace debe contener los siguientes artefactos:
-
-| Artefacto | Tipo | Nombre | Usado en |
-|---|---|---|---|
-| Workspace | Contenedor | `Fabric_MedallionLab_[Iniciales]` | Todos los labs |
-| Lakehouse | Data Engineering | `lh_ventas` | Labs 02, 03, 04, 05 |
-| SQL Endpoint | Análisis SQL | `lh_ventas SQL analytics endpoint` | Labs 03, 04 |
-| Notebook de validación | Data Engineering | `nb_validacion_shortcuts` | Solo Lab 01 |
-| Shortcut ADLS Gen2 | Conectividad | `raw_ventas_ext` | Labs 02, 03 |
-| Shortcut Blob Storage | Conectividad | `raw_productos_ext` | Labs 02, 03 |
+| Elemento | Valor usado |
+|---|---|
+| Workspace | `FABTRIAL_` |
+| Lakehouse fuente | `lh_ventas_fuente` |
+| Ruta fuente | `Files/origen/ventas/raw` |
+| Lakehouse principal | `lh_ventas` |
+| Shortcut | `Files/Shortcuts/sc_origen_ventas` |
+| Carpeta Bronze | `Files/Bronze/raw` |
+| Notebook de validación | `NB_01_Verificar_OneLake` |
 
 ---
 
-## 8. Solución de Problemas
+## 8. Validación general del laboratorio
 
-### Problema 1 — El Shortcut muestra error de autenticación o no lista archivos
+Antes de continuar al Capítulo 2, confirma lo siguiente:
 
-**Síntoma:**
-- Al hacer clic en el Shortcut `raw_ventas_ext` o `raw_productos_ext`, aparece un ícono de error (❌) o un mensaje como `"Error al acceder al recurso"`, `"AuthorizationPermissionMismatch"` o `"The specified resource does not exist"`.
-- En el Notebook, la celda con `mssparkutils.fs.ls()` lanza una excepción `AnalysisException` o `FileNotFoundException`.
+| Validación | Estado |
+|---|---|
+| El workspace `FABTRIAL_<alias>` existe. | ☐ |
+| El workspace está asociado a Fabric Trial. | ☐ |
+| Existe `lh_ventas_fuente`. | ☐ |
+| Existen ocho CSV en `lh_ventas_fuente/Files/origen/ventas/raw`. | ☐ |
+| Existe `lh_ventas`. | ☐ |
+| Existe la estructura `Bronze`, `Shortcuts`. | ☐ |
+| Existe el shortcut `sc_origen_ventas`. | ☐ |
+| El notebook `NB_01_Verificar_OneLake` se ejecutó correctamente. | ☐ |
+| Los conteos de archivos coinciden con los esperados. | ☐ |
 
-**Causa probable:**
-El SAS Token proporcionado puede tener uno o más de los siguientes problemas:
-- El token ha expirado.
-- El token no tiene permisos de **lectura (r)** y/o **listado (l)** sobre el contenedor específico.
-- La URL del Storage Account fue ingresada incorrectamente (por ejemplo, usando el endpoint `.blob.core.windows.net` para un recurso ADLS Gen2 que requiere `.dfs.core.windows.net`).
-- El nombre del contenedor en la URL no coincide con el contenedor real en el Storage Account.
+---
+
+## 9. Errores frecuentes y solución
+
+### Problema 1 - No aparece la opción Lakehouse
+
+**Causa probable:** el workspace no está asociado a una capacidad Fabric o el usuario no tiene permisos.
 
 **Solución:**
-1. Verifica la URL del Storage Account: para ADLS Gen2 debe terminar en `.dfs.core.windows.net`; para Blob Storage estándar debe terminar en `.blob.core.windows.net`.
-2. Solicita al instructor un nuevo SAS Token y confirma que incluye los permisos `r` (Read) y `l` (List) en su cadena (busca `sp=rl` o `sp=racwdlmeopi` en el token).
-3. Elimina el Shortcut con error: haz clic derecho sobre él en el explorador → **Eliminar**. Recrea el Shortcut desde el Paso 4 con las credenciales corregidas.
-4. Verifica que la fecha de expiración del token (`se=YYYY-MM-DD`) sea posterior a la fecha actual.
-5. Si el problema persiste, solicita al instructor las URLs de SAS Token preconfiguradas del storage de demostración del curso.
+
+1. Revisa que Fabric Trial esté activo.
+2. Revisa que el workspace esté asignado a Trial.
+3. Solicita al instructor rol Contributor o Member en el workspace.
+4. Actualiza el navegador y vuelve a intentar.
 
 ---
 
-### Problema 2 — El clúster Spark no inicia o la celda del Notebook queda en estado "En ejecución" indefinidamente
+### Problema 2 - No puedo cargar archivos CSV
 
-**Síntoma:**
-- Al ejecutar la primera celda del Notebook, el estado muestra "Iniciando sesión de Spark..." por más de 15 minutos sin avanzar.
-- El indicador de progreso de la celda gira indefinidamente sin mostrar resultados.
-- Aparece un mensaje de error como `"SparkException: Spark session failed to start"` o `"The Spark cluster is not available"`.
-
-**Causa probable:**
-La capacidad Trial de Microsoft Fabric tiene recursos de cómputo Spark compartidos entre todos los usuarios del tenant. Durante horas de alta demanda (especialmente en entornos de clase con múltiples estudiantes ejecutando Notebooks simultáneamente), el aprovisionamiento del clúster Spark puede demorar significativamente o fallar por falta de capacidad disponible en ese momento.
+**Causa probable:** el navegador bloqueó la carga, la sesión expiró o no estás dentro de la carpeta correcta.
 
 **Solución:**
-1. **Espera adicional:** Si el clúster lleva menos de 10 minutos iniciando, espera. El tiempo de inicialización en capacidad Trial puede ser de hasta 10-15 minutos en condiciones de alta carga.
-2. **Cancelar y reintentar:** Si llevas más de 15 minutos esperando, haz clic en el botón **Cancelar** (⏹) de la celda en ejecución, espera 2 minutos y vuelve a ejecutar.
-3. **Verificar el estado de la capacidad:** Ve a `https://app.fabric.microsoft.com` → Configuración del Workspace → Capacidad. Si la capacidad muestra un indicador de "Throttled" o "Pausada", espera 10-15 minutos antes de reintentar.
-4. **Escalonamiento en clase:** El instructor puede coordinar que los estudiantes ejecuten los Notebooks en grupos de 3-5 personas para evitar saturar la capacidad Trial compartida.
-5. **Verificar la sesión de Spark:** En la barra superior del Notebook, verifica que el tipo de sesión sea **Spark** (no **Python** o **SQL**). Si está configurado incorrectamente, cámbialo desde el menú de configuración del Notebook.
-6. Si el problema persiste después de 3 intentos, documenta los resultados de los Pasos 1-6 y continúa con la validación mediante el SQL Endpoint (Paso 6). La validación completa de Spark puede realizarse al inicio del Lab 02.
+
+1. Verifica que estás en `lh_ventas_fuente/Files/origen/ventas/raw`.
+2. Carga los archivos en grupos si el navegador falla.
+3. No arrastres carpetas completas; selecciona los archivos CSV.
+4. Si la sesión expiró, inicia sesión nuevamente.
 
 ---
 
-## 9. Limpieza de Recursos
+### Problema 3 - El shortcut se crea, pero no muestra archivos
 
-> 🚨 **ADVERTENCIA CRÍTICA:** **NO elimines ningún recurso creado en este laboratorio.** El Workspace, el Lakehouse `lh_ventas` y los Shortcuts son consumidos directamente por los Labs 02, 03, 04 y 05. Eliminar cualquiera de estos artefactos interrumpirá la secuencia completa del curso.
+**Causa probable:** seleccionaste una ruta incorrecta o no tienes permisos sobre el Lakehouse de origen.
 
-### Lo que NO debes hacer al finalizar este laboratorio:
-- ❌ No elimines el Workspace `Fabric_MedallionLab_[Iniciales]`
-- ❌ No elimines el Lakehouse `lh_ventas`
-- ❌ No elimines los Shortcuts `raw_ventas_ext` ni `raw_productos_ext`
-- ❌ No elimines las carpetas de la estructura Medallion
+**Solución:**
 
-### Lo que SÍ puedes hacer:
-- ✅ Cerrar el Notebook `nb_validacion_shortcuts` (los resultados quedan guardados)
-- ✅ Cerrar las pestañas del navegador relacionadas con Fabric
-- ✅ Cerrar sesión en el portal de Fabric si terminas la sesión de trabajo
-
-### Limpieza final (solo al completar TODOS los laboratorios del curso):
-
-Una vez finalizado el Lab 05, el instructor proporcionará una guía de limpieza completa. El proceso general será:
-
-1. Navegar al Workspace `Fabric_MedallionLab_[Iniciales]`.
-2. Acceder a **Configuración del Workspace** → **Otros** → **Eliminar este workspace**.
-3. Confirmar la eliminación escribiendo el nombre del Workspace.
-
-Esto eliminará todos los artefactos y liberará la capacidad Trial para su reutilización.
+1. Elimina únicamente el shortcut, no los archivos de origen.
+2. Vuelve a crearlo seleccionando `lh_ventas_fuente > Files > origen > ventas > raw`.
+3. Confirma que tu usuario puede abrir ambos Lakehouses.
 
 ---
 
-## 10. Resumen
+### Problema 4 - El notebook no encuentra la ruta `Files/Shortcuts/sc_origen_ventas`
 
-### Conceptos aplicados en este laboratorio
+**Causa probable:** el notebook no tiene agregado el Lakehouse `lh_ventas` o el shortcut tiene otro nombre.
 
-En este laboratorio aplicaste los conceptos fundamentales de la arquitectura Lakehouse en Microsoft Fabric:
+**Solución:**
 
-| Concepto | Aplicación en el laboratorio |
-|---|---|
-| **OneLake como almacenamiento unificado** | Todo el Lakehouse `lh_ventas` reside en OneLake; las carpetas `Files` y `Tables` son parte del mismo almacén jerárquico |
-| **Arquitectura Medallion** | Creaste manualmente la estructura `Bronze/Silver/Gold` que guiará todo el flujo de datos del curso |
-| **Shortcuts como acceso federado** | Los datos del instructor en ADLS Gen2/Blob Storage son accesibles desde el Lakehouse sin copiarlos físicamente a OneLake |
-| **SQL Endpoint automático** | Fabric aprovisionó un endpoint SQL de solo lectura al crear el Lakehouse, sin configuración de infraestructura |
-| **PySpark para validación** | Usaste `mssparkutils.fs.ls()` y `spark.read` para confirmar que los Shortcuts resuelven correctamente hacia los datos externos |
-
-### Puntos clave para recordar
-
-1. **Un Lakehouse = tres componentes automáticos:** almacenamiento Delta Lake (Files + Tables), SQL Endpoint y Semantic Model predeterminado.
-2. **Los Shortcuts NO copian datos:** cada lectura resuelve la referencia en tiempo real hacia el origen externo. Esto garantiza datos siempre actualizados y elimina costos de duplicación.
-3. **La seguridad de los Shortcuts se hereda del Workspace:** quién tiene acceso al Lakehouse tiene acceso a los datos del Shortcut, independientemente de los permisos en el origen.
-4. **La estructura de carpetas Medallion es una convención:** Fabric no impone esta estructura, pero adoptarla facilita la gobernanza, el linaje de datos y la colaboración en equipo.
-5. **El SQL Endpoint es de solo lectura:** no puedes escribir datos directamente a través del SQL Endpoint; para escribir, debes usar Notebooks (Spark) o Pipelines (Data Factory).
-
-### Próximos pasos
-
-Con el Lakehouse configurado, la estructura Medallion establecida y los Shortcuts como puerta de entrada a las fuentes externas, estás listo para el siguiente laboratorio. En el **Lab 02**, construirás un **pipeline de ingesta automatizada** usando Data Factory dentro de Microsoft Fabric para orquestar la carga de datos desde los orígenes conectados mediante los Shortcuts hacia tablas Delta Lake estructuradas en la capa Bronze, siguiendo los principios de la arquitectura Medallion.
-
-### Recursos adicionales
-
-| Recurso | URL |
-|---|---|
-| Documentación oficial — Microsoft Fabric Lakehouse | https://learn.microsoft.com/es-es/fabric/data-engineering/lakehouse-overview |
-| Introducción a OneLake | https://learn.microsoft.com/es-es/fabric/onelake/onelake-overview |
-| Creación y uso de Shortcuts en OneLake | https://learn.microsoft.com/es-es/fabric/onelake/onelake-shortcuts |
-| Shortcuts hacia Azure Data Lake Storage Gen2 | https://learn.microsoft.com/es-es/fabric/onelake/create-adls-shortcut |
-| Seguridad y control de acceso en Microsoft Fabric | https://learn.microsoft.com/es-es/fabric/security/security-overview |
+1. En el notebook, agrega `lh_ventas` como Lakehouse.
+2. Verifica que el shortcut se llama exactamente `sc_origen_ventas`.
+3. Respeta mayúsculas/minúsculas en `Files/Shortcuts`.
+4. Vuelve a ejecutar la celda.
 
 ---
 
-*Lab 01-00-01 — Versión 1.0 | Curso: Arquitectura Medallion en Microsoft Fabric | Duración: 75 minutos*
+## 10. Cierre del laboratorio
+
+En este capítulo preparaste el entorno base del taller y validaste que OneLake puede operar como capa de almacenamiento central. También comprobaste que un shortcut interno permite exponer datos de un Lakehouse a otro sin moverlos físicamente.
+
+Los siguientes capítulos usarán exactamente estos artefactos para construir la arquitectura Medallion, automatizar la ingesta, transformar datos y consumirlos desde Power BI mediante Direct Lake.
+
+---
+
+## 11. Preguntas de reflexión
+
+1. ¿Qué diferencia hay entre cargar un archivo en `lh_ventas_fuente` y verlo desde `lh_ventas` mediante un shortcut?
+2. ¿Por qué es útil separar un Lakehouse de origen y un Lakehouse analítico?
+3. ¿Qué beneficios tiene centralizar el acceso a datos mediante OneLake y shortcuts?
+4. ¿Qué pasaría con el shortcut si se elimina la carpeta de origen?
+5. ¿Por qué es importante respetar la convención de nombres en un taller encadenado?
+

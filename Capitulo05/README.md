@@ -1,966 +1,596 @@
-# Eficiencia Operativa: Configuración de alerta automática basada en eventos
+# Eficiencia operativa: Configuración de alerta automática basada en eventos
 
-## Metadatos del Laboratorio
+## 1. Metadatos
 
-| Atributo | Valor |
+| Atributo | Detalle |
 |---|---|
 | **Duración estimada** | 75 minutos |
 | **Complejidad** | Media |
-| **Nivel Bloom** | Aplicar (Apply) |
-| **Laboratorio número** | 05 de 05 |
-| **Dependencia previa** | Labs 01-00-01, 02-00-01, 03-00-01 y 04-00-01 completados |
+| **Nivel Bloom** | Aplicar / Analizar |
+| **Módulo** | Capítulo 5 - Automatización y Monitoreo Inteligente |
+| **Laboratorio previo requerido** | Capítulos 1, 2, 3 y 4 completados |
+| **Tecnología principal** | Power BI report alerts y Fabric Activator |
+| **Cierre del taller** | Sí |
 
 ---
 
-## Descripción General
+## 2. Descripción general
 
-Este laboratorio cierra el ciclo operativo de la arquitectura Medallion implementando capacidades de observabilidad y respuesta automática mediante **Data Activator** (anteriormente Reflex) en Microsoft Fabric. El estudiante conectará Data Activator a dos fuentes de datos —el informe de Power BI creado en el Lab 4 y las tablas Delta del Lakehouse— para monitorear KPIs de negocio y métricas operacionales del pipeline. Se configurarán reglas de detección con condiciones basadas en umbrales de negocio y se definirán acciones de respuesta automática que incluyen notificaciones por email, mensajes en Microsoft Teams y activación opcional de pipelines correctivos. Al finalizar, el estudiante habrá implementado un flujo completo de observabilidad: desde la detección del evento hasta la respuesta automatizada, sin intervención humana.
+Este laboratorio cierra el ciclo de la arquitectura moderna implementada durante el taller. Configurarás alertas sobre el reporte `Informe_Ventas_DirectLake`, usando medidas y visuales construidos en el Capítulo 4 y datos de monitoreo generados en la tabla `gold_alertas_operativas`.
 
----
+El objetivo principal es comprender el patrón de monitoreo, revisar la salud básica de las ejecuciones en Fabric y configurar una alerta en Fabric Activator desde un reporte de Power BI. La notificación mínima del laboratorio se realizará con las opciones disponibles en el tenant, priorizando email cuando esté habilitado.
 
-## Objetivos de Aprendizaje
-
-Al completar este laboratorio, el estudiante será capaz de:
-
-- [ ] Configurar un Reflex de Data Activator conectado a un informe de Power BI para monitorear KPIs de ventas en tiempo real
-- [ ] Definir Objetos, Propiedades y Reglas (Triggers) en Data Activator con condiciones basadas en umbrales de negocio
-- [ ] Configurar acciones de respuesta automática (email y Microsoft Teams) que se disparan al detectar una anomalía
-- [ ] Simular un escenario de alerta para verificar el funcionamiento end-to-end del sistema de observabilidad
-- [ ] Documentar el runbook operativo resultante que describe el flujo evento → detección → respuesta
+> La disponibilidad de Activator y del botón **Set alert** puede depender de configuración del tenant, permisos y experiencia habilitada en la región. Por eso el laboratorio incluye una validación principal y una validación alternativa.
 
 ---
 
-## Prerrequisitos
+## 3. Objetivos de aprendizaje
 
-### Conocimiento previo requerido
+Al completar este laboratorio serás capaz de:
 
-| Área | Nivel requerido |
-|---|---|
-| Labs 01 al 04 completados en orden | **Obligatorio** — este lab consume artefactos de todos los anteriores |
-| Conceptos de monitoreo operacional y umbrales de alerta | Básico |
-| Navegación en Microsoft Fabric (Workspaces, Lakehouse, Power BI) | Intermedio |
-| Conceptos de event-driven architecture (eventos, triggers, acciones) | Básico |
-| Acceso a Microsoft Teams o cuenta de email activa | **Obligatorio** para recibir notificaciones de prueba |
-
-### Acceso y recursos requeridos
-
-| Recurso | Estado requerido |
-|---|---|
-| Microsoft Fabric Trial activo | ✅ Activo y con capacidad disponible |
-| Workspace `FabricLakehouseLab` (creado en Lab 01) | ✅ Existente con todos los artefactos previos |
-| Lakehouse `SalesLakehouse` con tablas Silver | ✅ Tablas `silver_ventas` y `silver_productos` disponibles |
-| Informe de Power BI `Reporte_Ventas_Silver` (Lab 04) | ✅ Publicado en el Workspace de Fabric |
-| Pipeline `Pipeline_Ingesta_Bronze` (Lab 02) | ✅ Existente y ejecutable |
-| Microsoft Teams (canal o chat personal) | ✅ Con permisos para recibir mensajes de aplicaciones |
-| Data Activator disponible en la región del tenant | ✅ Verificar antes de comenzar |
-
-> ⚠️ **VERIFICACIÓN PREVIA CRÍTICA**: Antes de comenzar, confirme que Data Activator esté disponible en su región de tenant. Navegue a su Workspace en Fabric, haga clic en **+ New** y busque **Reflex** o **Data Activator** en la lista de artefactos. Si no aparece, consulte al instructor para alternativas según su región.
+- Validar una tabla de monitoreo en el Lakehouse.
+- Identificar métricas de negocio aptas para alertas.
+- Configurar una alerta desde un visual de Power BI.
+- Guardar o asociar la alerta a un artefacto Activator.
+- Revisar reglas en Fabric Activator.
+- Revisar Monitor Hub para validar ejecuciones, duración y estado de pipelines/notebooks.
+- Probar una condición de alerta con datos existentes.
+- Documentar un runbook operativo básico.
+- Entender limitaciones de Trial, tenant y permisos.
 
 ---
 
-## Entorno del Laboratorio
+## 4. Prerrequisitos
 
-### Hardware mínimo recomendado
+### 4.1 Artefactos requeridos
 
-| Componente | Mínimo | Recomendado |
+| Artefacto | Nombre esperado | Estado |
 |---|---|---|
-| Procesador | Intel Core i5 8ª gen / AMD Ryzen 5 | Intel Core i7 / AMD Ryzen 7 |
-| RAM | 8 GB | 16 GB |
-| Almacenamiento libre | 500 MB | 1 GB |
-| Resolución de pantalla | 1366×768 | 1920×1080 |
-| Conexión a Internet | 10 Mbps | 25 Mbps |
+| Workspace | `FABTRIAL_<alias>` | ☐ |
+| Lakehouse | `lh_ventas` | ☐ |
+| Tabla de monitoreo | `gold_alertas_operativas` | ☐ |
+| Modelo semántico | `SM_Ventas_DirectLake` | ☐ |
+| Reporte | `Informe_Ventas_DirectLake` | ☐ |
+| Página de reporte | `Monitoreo` | ☐ |
+| Medida | `KPI Dias Venta Baja` | ☐ |
+| Medida | `KPI Dias Venta Alta` | ☐ |
 
-### Software requerido
+### 4.2 Permisos requeridos
 
-| Software | Versión mínima | Propósito en este lab |
-|---|---|---|
-| Microsoft Edge o Google Chrome | 110 o superior | Acceso a Microsoft Fabric |
-| Microsoft Fabric Trial | Trial activo | Plataforma principal |
-| Power BI Desktop | Mayo 2024 o superior | Verificación del modelo semántico |
-| Microsoft Teams | Cualquier versión reciente | Recepción de alertas |
+| Permiso | Por qué se requiere |
+|---|---|
+| Editar el reporte | Para ver y configurar el botón **Set alert**. |
+| Workspace en capacidad Fabric | Activator requiere un workspace con capacidad habilitada. |
+| Permiso para crear elementos | Para crear o asociar el Activator item. |
+| Tenant setting habilitado | El administrador puede habilitar o bloquear alertas desde Power BI. |
 
-### Arquitectura de referencia del laboratorio
+### 4.3 Servicios opcionales
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MICROSOFT FABRIC                          │
-│                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌───────────────┐  │
-│  │  Lakehouse   │    │   Power BI   │    │ Data Activator│  │
-│  │  (OneLake)   │───▶│   Report     │───▶│   (Reflex)    │  │
-│  │              │    │              │    │               │  │
-│  │ silver_ventas│    │Reporte_Ventas│    │  Objects      │  │
-│  │ silver_prods │    │   _Silver    │    │  Properties   │  │
-│  └──────────────┘    └──────────────┘    │  Triggers     │  │
-│                                          └───────┬───────┘  │
-└──────────────────────────────────────────────────┼──────────┘
-                                                   │
-                    ┌──────────────────────────────┼──────┐
-                    ▼                              ▼      ▼
-              📧 Email                      💬 Teams  ⚙️ Pipeline
-           Notificación                    Mensaje    Re-ejecución
+| Servicio | Estado en este taller |
+|---|---|
+| Email | Recomendado para notificación básica. |
+| Otros canales de notificación | Opcionales. No bloquean el laboratorio. |
+
+---
+
+## 5. Resultado esperado
+
+Al finalizar tendrás:
+
+```text
+ACT_Monitoreo_Ventas
 ```
 
+O un Activator item creado automáticamente por Power BI con una regla activa sobre el reporte `Informe_Ventas_DirectLake`.
+
+La regla mínima del laboratorio será:
+
+```text
+Si KPI Dias Venta Baja > 0
+entonces enviar notificación por email.
+```
+
+También documentarás un runbook operativo básico con responsables, umbrales, acciones sugeridas y una verificación técnica del estado de pipelines/notebooks.
+
 ---
 
-## Instrucciones Paso a Paso
+## 6. Conceptos clave
+
+### 6.1 Monitoreo de negocio vs. monitoreo técnico
+
+| Tipo | Ejemplo en este taller |
+|---|---|
+| Monitoreo de negocio | Días con venta baja, venta diaria por debajo del umbral. |
+| Monitoreo técnico | Pipeline sin ejecución exitosa, Dataflow fallido, notebook con error o tablas sin actualización. |
+
+Este laboratorio prioriza monitoreo de negocio desde Power BI porque es el camino más fluido para participantes. Además, agrega una revisión técnica corta en Monitor Hub para conectar el estado de los procesos con la operación del Lakehouse.
+
+### 6.2 Tabla de soporte `gold_alertas_operativas`
+
+La tabla se creó en el Capítulo 3. Contiene una fila por fecha y clasifica el estado del día:
+
+```text
+Normal
+Venta baja
+Venta alta
+```
+
+Columnas principales:
+
+```text
+fecha_venta
+venta_total_dia
+transacciones_dia
+umbral_bajo
+umbral_alto
+estado_alerta
+fecha_evaluacion
+```
+
+### 6.3 Condición de prueba
+
+La condición `KPI Dias Venta Baja > 0` se usa porque el dataset ya contiene días clasificados como `Venta baja`, lo cual permite validar la regla sin modificar datos.
+
+### 6.4 Monitoreo técnico mínimo del taller
+
+Además de alertas de negocio, el cierre del taller debe demostrar que el participante sabe revisar la salud operativa básica de la solución.
+
+| Elemento | Qué revisar |
+|---|---|
+| Pipeline `pl_01_ingesta_bronze` | Última ejecución, estado, duración y detalle de actividades. |
+| Pipeline `pl_02_medallion_end_to_end` | Ejecución del notebook Silver/Gold y errores si aparecen. |
+| Notebooks | Estado del job Spark, duración aproximada y salida de validación. |
+| Dataflow Gen2 `dfg_01_perfil_productos` | Último refresh y estado, si se creó en el Capítulo 2. |
+| SQL endpoint | Que las tablas finales sean consultables. |
+| Modelo/reporte | Que el reporte abra sin errores y las medidas respondan a filtros. |
+
+Este monitoreo se realiza desde **Monitor Hub**, historial de ejecución de elementos y validaciones SQL. Si el instructor tiene permisos administrativos, puede complementar con métricas de capacidad, pero no es requisito para los participantes.
 
 ---
 
-### Paso 1: Verificación del entorno y preparación de métricas en el Lakehouse
+## 7. Procedimiento paso a paso
 
-**Objetivo**: Confirmar que todos los artefactos de los labs anteriores están disponibles y crear una vista SQL en el Lakehouse que exponga las métricas operacionales que Data Activator monitoreará.
+### Paso 1 - Validar la tabla de monitoreo en SQL endpoint
+
+**Objetivo:** confirmar que existen datos para activar alertas.
 
 #### Instrucciones
 
-1. Abra su navegador y acceda a [https://app.fabric.microsoft.com](https://app.fabric.microsoft.com). Inicie sesión con sus credenciales del tenant.
-
-2. En el panel izquierdo, haga clic en **Workspaces** y seleccione **FabricLakehouseLab**.
-
-3. Verifique que los siguientes artefactos existen en el Workspace. Anote cualquier elemento faltante antes de continuar:
-
-   | Artefacto | Tipo | Estado esperado |
-   |---|---|---|
-   | `SalesLakehouse` | Lakehouse | ✅ Con tablas silver_ventas y silver_productos |
-   | `Pipeline_Ingesta_Bronze` | Data Pipeline | ✅ Con al menos 1 ejecución exitosa |
-   | `Reporte_Ventas_Silver` | Power BI Report | ✅ Publicado y funcional |
-   | `Modelo_Ventas_DirectLake` | Semantic Model | ✅ En modo Direct Lake |
-
-4. Haga clic en **SalesLakehouse** para abrirlo.
-
-5. En el panel superior derecho del Lakehouse, cambie la vista a **SQL analytics endpoint** haciendo clic en el selector de modo (esquina superior derecha, donde dice "Lakehouse").
-
-6. En el editor SQL del SQL Analytics Endpoint, abra una nueva consulta y ejecute el siguiente código para verificar que las tablas Silver tienen datos:
+1. Abre el workspace `FABTRIAL_<alias>`.
+2. Abre el Lakehouse `lh_ventas`.
+3. Cambia a **SQL analytics endpoint**.
+4. Ejecuta:
 
 ```sql
--- Verificación de datos en tablas Silver
-SELECT 
-    'silver_ventas' AS tabla,
-    COUNT(*) AS total_registros,
-    MAX(fecha_venta) AS ultima_fecha,
-    SUM(monto_total) AS venta_total
-FROM silver_ventas
-
-UNION ALL
-
-SELECT 
-    'silver_productos' AS tabla,
-    COUNT(*) AS total_registros,
-    MAX(fecha_actualizacion) AS ultima_fecha,
-    NULL AS venta_total
-FROM silver_productos;
-```
-
-7. Confirme que ambas tablas retornan registros. Si alguna tabla está vacía, detenga el laboratorio y complete los labs anteriores.
-
-8. Ahora cree una vista que exponga las métricas de ventas diarias que servirán como base para las alertas. Ejecute el siguiente script:
-
-```sql
--- Creación de vista de métricas diarias para monitoreo
--- Esta vista será la fuente de datos para las alertas operacionales
-
-CREATE OR ALTER VIEW vw_metricas_ventas_diarias AS
 SELECT
-    CAST(fecha_venta AS DATE)          AS fecha,
-    COUNT(*)                           AS total_transacciones,
-    SUM(monto_total)                   AS venta_total_dia,
-    AVG(monto_total)                   AS ticket_promedio,
-    COUNT(DISTINCT id_cliente)         AS clientes_unicos,
-    COUNT(DISTINCT id_producto)        AS productos_vendidos
-FROM silver_ventas
-GROUP BY CAST(fecha_venta AS DATE);
+    estado_alerta,
+    COUNT(*) AS dias,
+    MIN(fecha_venta) AS primera_fecha,
+    MAX(fecha_venta) AS ultima_fecha
+FROM gold_alertas_operativas
+GROUP BY estado_alerta
+ORDER BY dias DESC;
 ```
 
-9. Ejecute una consulta de validación sobre la vista recién creada:
+5. Ejecuta también:
 
 ```sql
--- Validación de la vista de métricas
-SELECT TOP 10 *
-FROM vw_metricas_ventas_diarias
-ORDER BY fecha DESC;
+SELECT TOP 20
+    fecha_venta,
+    venta_total_dia,
+    transacciones_dia,
+    umbral_bajo,
+    umbral_alto,
+    estado_alerta
+FROM gold_alertas_operativas
+WHERE estado_alerta <> 'Normal'
+ORDER BY fecha_venta DESC;
 ```
 
-10. Tome nota del valor de `venta_total_dia` del día más reciente. Lo necesitará para definir el umbral de alerta en el Paso 3.
+#### Resultado esperado
 
-#### Salida esperada
-
-La consulta de verificación devuelve dos filas con conteos de registros mayores a cero. La vista `vw_metricas_ventas_diarias` se crea exitosamente y retorna filas con fechas, montos y conteos de transacciones.
-
-#### Verificación
-
-✅ Ambas tablas Silver contienen registros  
-✅ La vista `vw_metricas_ventas_diarias` existe y retorna datos  
-✅ Todos los artefactos del Workspace están presentes  
+Debe existir al menos un grupo `Venta baja` y posiblemente `Venta alta`.
 
 ---
 
-### Paso 2: Creación del artefacto Data Activator (Reflex) en el Workspace
+### Paso 2 - Abrir el reporte en modo edición
 
-**Objetivo**: Crear un nuevo artefacto de tipo Reflex (Data Activator) en el Workspace de Fabric que servirá como contenedor para todos los objetos de monitoreo del laboratorio.
+**Objetivo:** preparar el visual desde el cual se creará la alerta.
 
 #### Instrucciones
 
-1. Regrese al Workspace **FabricLakehouseLab** haciendo clic en su nombre en la ruta de navegación (breadcrumb) superior.
+1. Regresa al workspace `FABTRIAL_<alias>`.
+2. Abre el reporte:
 
-2. En la barra superior del Workspace, haga clic en el botón **+ New** (Nuevo).
-
-3. En el panel de creación de artefactos, busque **Reflex** en el campo de búsqueda. Si no aparece como "Reflex", busque también **Data Activator**.
-
-   > 📝 **Nota**: Microsoft Fabric está en evolución continua. El artefacto puede aparecer como "Reflex" o "Data Activator" dependiendo de la versión de la interfaz en su tenant. Ambos nombres se refieren al mismo componente.
-
-4. Haga clic en la tarjeta **Reflex** para iniciar la creación.
-
-5. En el diálogo de nombre, ingrese exactamente:
-   ```
-   Alertas_Operacionales_Ventas
+   ```text
+   Informe_Ventas_DirectLake
    ```
 
-6. Haga clic en **Create** (Crear).
+3. Selecciona **Edit** o **Editar**.
+4. Abre la página:
 
-7. Espere a que el artefacto se inicialice. Verá la interfaz de Data Activator con tres paneles principales:
-   - **Panel izquierdo**: árbol de Objetos (Objects)
-   - **Panel central**: editor de Propiedades (Properties) y Reglas (Rules/Triggers)
-   - **Panel derecho**: configuración de detalles
+   ```text
+   Monitoreo
+   ```
 
-8. Familiarícese con la interfaz identificando los siguientes elementos:
-   - Botón **Get data** (Obtener datos) en la barra superior — para conectar fuentes
-   - Sección **Objects** en el panel izquierdo — donde aparecerán los objetos de monitoreo
-   - Área de trabajo central — donde se definirán propiedades y reglas
+5. Confirma que existen las tarjetas:
 
-#### Salida esperada
+   ```text
+   Dias Venta Baja
+   Dias Venta Alta
+   ```
 
-El artefacto `Alertas_Operacionales_Ventas` aparece en el Workspace y se abre en la interfaz de Data Activator. La pantalla muestra un entorno vacío con el mensaje de bienvenida o instrucciones para agregar datos.
+#### Resultado esperado
 
-#### Verificación
+El reporte se abre en modo edición y se ve la página Monitoreo.
 
-✅ El artefacto `Alertas_Operacionales_Ventas` aparece en el listado del Workspace  
-✅ La interfaz de Data Activator se carga sin errores  
-✅ Los tres paneles principales son visibles  
+#### Validación
 
----
-
-### Paso 3: Conexión de Data Activator al informe de Power BI
-
-**Objetivo**: Conectar el artefacto Data Activator al informe `Reporte_Ventas_Silver` de Power BI para monitorear KPIs de ventas y crear el primer objeto de monitoreo basado en el visual de ventas totales.
-
-#### Instrucciones
-
-**Parte A: Configurar la alerta desde el informe de Power BI**
-
-1. Abra una nueva pestaña del navegador y navegue al Workspace **FabricLakehouseLab**.
-
-2. Haga clic en el informe **Reporte_Ventas_Silver** para abrirlo en modo de lectura (no en Power BI Desktop).
-
-3. Identifique en el informe el visual de tipo **Tarjeta (Card)** que muestra el total de ventas o el KPI principal de ventas. Si tiene múltiples visuals, busque el que muestre `Venta Total` o `Total de Ventas`.
-
-   > 📝 **Nota**: Si su informe tiene una estructura diferente a la esperada, seleccione cualquier visual de tipo Card o KPI que muestre un valor numérico relevante para el negocio.
-
-4. Haga clic en los **tres puntos (...)** que aparecen en la esquina superior derecha del visual al pasar el cursor sobre él.
-
-5. En el menú contextual, seleccione **Set alert** (Configurar alerta) o **Alertar** según el idioma de la interfaz.
-
-   > ⚠️ **Importante**: Si no ve la opción "Set alert", asegúrese de estar viendo el informe en el servicio de Fabric (browser), no en Power BI Desktop. La opción solo está disponible en el servicio publicado.
-
-6. Fabric abrirá automáticamente un panel lateral derecho de configuración de alerta. Revise los campos disponibles.
-
-7. En el panel de configuración de alerta, configure los siguientes parámetros:
-
-   | Campo | Valor a configurar |
-   |---|---|
-   | **Nombre de la alerta** | `Alerta_VentaTotal_Umbral_Minimo` |
-   | **Condición** | `Becomes less than` (Se vuelve menor que) |
-   | **Umbral (Threshold)** | Ingrese el 80% del valor de `venta_total_dia` que anotó en el Paso 1 (ej: si el valor era 50,000, ingrese 40,000) |
-   | **Frecuencia de verificación** | `Daily` o la opción de menor frecuencia disponible para el trial |
-
-8. En la sección de **Acciones (Actions)**, configure:
-   - **Notificarme (Notify me)**: Asegúrese de que su email aparezca como destinatario
-   - Si ve la opción de **Teams**, actívela también
-
-9. Haga clic en **Start my alert** (Iniciar mi alerta) o **Crear** según la versión de la interfaz.
-
-10. Fabric mostrará un mensaje de confirmación indicando que la alerta fue creada y que puede verla en Data Activator.
-
-**Parte B: Verificar la creación del objeto en Data Activator**
-
-11. Regrese a la pestaña donde tiene abierto el artefacto **Alertas_Operacionales_Ventas** en Data Activator.
-
-    > 📝 **Nota**: Es posible que la alerta creada desde Power BI haya generado un Reflex separado con nombre automático. En ese caso, navegue al Workspace y abra el Reflex que se creó automáticamente. Puede renombrarlo o trabajar con él directamente.
-
-12. En el panel izquierdo de Data Activator, debería ver un nuevo **Objeto** creado automáticamente basado en el visual de Power BI. El nombre generalmente refleja el nombre del visual o del informe.
-
-13. Haga clic en el objeto para expandirlo y revise:
-    - La **Propiedad** creada automáticamente (que corresponde al valor del visual)
-    - La **Regla** (Rule/Trigger) con la condición que configuró
-
-14. Haga clic en la **Regla** para ver sus detalles en el panel central. Confirme que:
-    - La condición refleja `valor < [umbral configurado]`
-    - La acción de notificación está configurada correctamente
-
-#### Salida esperada
-
-En Data Activator aparece un objeto de monitoreo conectado al visual de Power BI. La regla muestra la condición de umbral configurada y la acción de notificación por email. El estado de la regla aparece como **Active** (Activo).
-
-#### Verificación
-
-✅ La opción "Set alert" fue accesible desde el visual del informe de Power BI  
-✅ El objeto aparece en el panel de Data Activator con al menos una propiedad y una regla  
-✅ La regla muestra estado "Active"  
-✅ La condición de umbral está correctamente configurada  
+La tarjeta `KPI Dias Venta Baja` debe mostrar un número mayor que cero.
 
 ---
 
-### Paso 4: Creación de un objeto de monitoreo operacional con condición compuesta
+### Paso 3 - Crear la alerta desde el reporte
 
-**Objetivo**: Crear manualmente un segundo objeto de monitoreo en Data Activator que monitoree el volumen de transacciones diarias directamente desde los datos del Lakehouse, con una condición de alerta compuesta y acción de notificación a Microsoft Teams.
+**Objetivo:** configurar una regla Activator desde Power BI.
 
 #### Instrucciones
 
-**Parte A: Preparar el dataset de métricas en Power BI para conectar a Data Activator**
+1. Con la tarjeta `KPI Dias Venta Baja` seleccionada, busca el botón **Set alert** en la cinta superior.
+2. Si no aparece en la cinta, abre el menú de tres puntos del visual y busca **Set alert**, **Add alert** o **Establecer alerta**.
+3. Selecciona **Set alert**.
+4. Si Fabric abre el panel de alertas, selecciona **Add alert**.
+5. En ubicación de guardado, selecciona el workspace:
 
-Para monitorear métricas del Lakehouse desde Data Activator, la forma más práctica en el contexto de este laboratorio es crear un visual adicional en el informe de Power BI basado en los datos de la vista `vw_metricas_ventas_diarias`.
+   ```text
+   FABTRIAL_<alias>
+   ```
 
-1. Abra **Power BI Desktop** en su computadora local.
+6. Si puedes crear un nuevo Activator item, usa el nombre:
 
-2. Conéctese al modelo semántico `Modelo_Ventas_DirectLake` usando **Obtener datos → Power BI datasets** y seleccione el modelo del Workspace.
+   ```text
+   ACT_Monitoreo_Ventas
+   ```
 
-   > 📝 **Alternativa**: Si prefiere trabajar directamente en el servicio, puede editar el informe `Reporte_Ventas_Silver` en el navegador usando el modo de edición.
+7. Configura la condición:
 
-3. Agregue un nuevo visual de tipo **Tarjeta (Card)** al informe con la medida de **Total de Transacciones** (count de registros de ventas). Si la medida no existe, créela:
+   ```text
+   KPI Dias Venta Baja becomes greater than 0
+   ```
 
-```dax
--- Medida DAX para total de transacciones del día más reciente
-Total_Transacciones_Hoy = 
-CALCULATE(
-    COUNTROWS(silver_ventas),
-    DATESINPERIOD(
-        silver_ventas[fecha_venta],
-        LASTDATE(silver_ventas[fecha_venta]),
-        -1,
-        DAY
-    )
-)
-```
+8. Configura la acción de notificación por email.
+9. Usa tu propio usuario como destinatario.
+10. Guarda o aplica la alerta.
 
-4. Agregue también una tarjeta con la medida de **Promedio de Ventas 7 días**:
+![Set alert](../images/Capitulo5/1.png)
 
-```dax
--- Medida DAX para promedio de ventas de los últimos 7 días
-Promedio_Ventas_7dias = 
-CALCULATE(
-    AVERAGE(silver_ventas[monto_total]),
-    DATESINPERIOD(
-        silver_ventas[fecha_venta],
-        LASTDATE(silver_ventas[fecha_venta]),
-        -7,
-        DAY
-    )
-)
-```
+#### Resultado esperado
 
-5. Guarde y publique el informe actualizado al Workspace **FabricLakehouseLab** con el mismo nombre `Reporte_Ventas_Silver` (reemplazando el existente).
+Fabric confirma que la alerta fue creada.
 
-**Parte B: Crear alerta sobre el volumen de transacciones**
+#### Validación
 
-6. En el servicio de Fabric (navegador), abra el informe `Reporte_Ventas_Silver` actualizado.
-
-7. Localice el nuevo visual de tarjeta **Total_Transacciones_Hoy**.
-
-8. Haga clic en los **tres puntos (...)** del visual y seleccione **Set alert**.
-
-9. Configure la alerta con los siguientes parámetros:
-
-   | Campo | Valor |
-   |---|---|
-   | **Nombre** | `Alerta_Volumen_Transacciones_Bajo` |
-   | **Condición** | `Becomes less than` |
-   | **Umbral** | `100` (simula un umbral de negocio: menos de 100 transacciones diarias es anómalo) |
-   | **Frecuencia** | La más baja disponible |
-
-10. En la sección de acciones, configure:
-    - **Email**: Su dirección de correo
-    - **Teams**: Active esta opción si está disponible y seleccione su canal o chat personal
-
-11. Haga clic en **Start my alert**.
-
-**Parte C: Personalizar la regla en Data Activator**
-
-12. Navegue al artefacto **Alertas_Operacionales_Ventas** en el Workspace (o al Reflex que se creó automáticamente).
-
-13. En el panel izquierdo, localice el nuevo objeto creado para el visual de transacciones.
-
-14. Haga clic en el objeto y luego en la **Regla** asociada para editarla.
-
-15. Busque la opción para **editar la condición** y agregue una condición adicional si la interfaz lo permite:
-    - Condición principal: `Total_Transacciones_Hoy < 100`
-    - Si hay opción de condición secundaria (AND): `Total_Transacciones_Hoy < Promedio_Ventas_7dias * 0.8`
-
-    > 📝 **Nota**: La disponibilidad de condiciones compuestas depende de la versión de Data Activator en su tenant. Si no está disponible, la condición simple es suficiente para el objetivo del laboratorio.
-
-16. En la sección de **Acciones** de la regla, verifique que esté configurada la acción de **Teams**. Si no está, haga clic en **Add action** y seleccione **Microsoft Teams**.
-
-17. Configure el mensaje de Teams:
-
-    | Campo | Valor |
-    |---|---|
-    | **Canal/Destinatario** | Su canal de Teams o chat personal |
-    | **Mensaje personalizado** | `⚠️ ALERTA OPERACIONAL: El volumen de transacciones de ventas ha caído por debajo del umbral mínimo. Valor detectado: {value}. Revisar pipeline de ingesta inmediatamente.` |
-
-18. Haga clic en **Save** (Guardar) para guardar los cambios en la regla.
-
-#### Salida esperada
-
-El artefacto Data Activator contiene ahora dos objetos de monitoreo activos: uno para ventas totales y otro para volumen de transacciones. Ambos tienen reglas activas con acciones configuradas. La regla de transacciones muestra la acción de Teams configurada con el mensaje personalizado.
-
-#### Verificación
-
-✅ Dos objetos de monitoreo visibles en el panel izquierdo de Data Activator  
-✅ La regla de transacciones tiene acción de Teams configurada  
-✅ El mensaje personalizado de Teams está guardado  
-✅ Ambas reglas muestran estado **Active**  
+El panel de alertas muestra la regla creada y asociada al reporte o al Activator item.
 
 ---
 
-### Paso 5: Configuración de alerta para monitoreo del pipeline de ingesta
+### Paso 4 - Abrir la alerta en Fabric Activator
 
-**Objetivo**: Crear una tercera regla de alerta que monitoree el estado del pipeline `Pipeline_Ingesta_Bronze` para detectar fallos o ejecuciones ausentes, configurando una acción de re-ejecución automática del pipeline como respuesta.
+**Objetivo:** revisar la regla en Activator.
 
 #### Instrucciones
 
-**Parte A: Crear métrica de estado del pipeline en el modelo**
+1. Regresa al workspace `FABTRIAL_<alias>`.
+2. Busca el artefacto:
 
-1. En Power BI Desktop, agregue la siguiente medida DAX al modelo semántico para simular una métrica de estado del pipeline:
+   ```text
+   ACT_Monitoreo_Ventas
+   ```
 
-```dax
--- Medida para detectar si hay datos recientes (simula monitoreo de pipeline)
--- Retorna 1 si hay datos de las últimas 24 horas, 0 si no hay datos recientes
-Pipeline_Datos_Recientes = 
-VAR UltimaFecha = LASTDATE(silver_ventas[fecha_venta])
-VAR HorasDesdeUltimoDato = 
-    DATEDIFF(UltimaFecha, TODAY(), HOUR)
-RETURN
-    IF(HorasDesdeUltimoDato <= 24, 1, 0)
-```
+   Si no aparece con ese nombre, busca un elemento de tipo Activator creado automáticamente.
 
-2. Agregue un visual de **Tarjeta** con esta medida al informe y publíquelo nuevamente.
+3. Abre el artefacto.
+4. Revisa el panel de objetos, propiedades y reglas.
+5. Localiza la regla asociada a `KPI Dias Venta Baja`.
+6. Confirma que la condición está activa.
 
-3. En el servicio de Fabric, abra el informe y cree una alerta sobre este nuevo visual:
+![Activator](../images/Capitulo5/2.png)
 
-   | Campo | Valor |
-   |---|---|
-   | **Nombre** | `Alerta_Pipeline_Sin_Datos_Recientes` |
-   | **Condición** | `Becomes equal to` o `Is less than` |
-   | **Umbral** | `1` (alerta cuando el valor sea 0, indicando ausencia de datos recientes) |
+#### Resultado esperado
 
-4. Configure la acción de email con el siguiente asunto y cuerpo:
-   - **Asunto**: `[CRÍTICO] Pipeline de ingesta sin ejecución en las últimas 24 horas`
-   - **Cuerpo**: Incluya el valor detectado y la hora de detección
-
-**Parte B: Configurar activación de pipeline como acción correctiva (opcional avanzado)**
-
-5. En el artefacto Data Activator, navegue a la regla `Alerta_Pipeline_Sin_Datos_Recientes`.
-
-6. Haga clic en **Add action** (Agregar acción).
-
-7. Si está disponible en su versión de Fabric, seleccione **Start a Fabric item** o **Run a pipeline** como tipo de acción.
-
-   > 📝 **Nota**: La capacidad de activar pipelines directamente desde Data Activator puede estar en preview o no disponible en todas las regiones. Si no está disponible, configure en su lugar una acción de **Power Automate** con el siguiente flujo:
-
-```
-Trigger: Data Activator webhook
-Action 1: HTTP POST a la API de Fabric para ejecutar el pipeline
-   URL: https://api.fabric.microsoft.com/v1/workspaces/{workspaceId}/items/{pipelineId}/jobs/instances
-   Method: POST
-   Body: {"executionData": {}}
-Action 2: Enviar email de confirmación de re-ejecución iniciada
-```
-
-8. Si usa la activación directa de pipeline, configure:
-
-   | Campo | Valor |
-   |---|---|
-   | **Workspace** | `FabricLakehouseLab` |
-   | **Pipeline** | `Pipeline_Ingesta_Bronze` |
-   | **Descripción de la acción** | `Re-ejecución automática por ausencia de datos` |
-
-9. Guarde todos los cambios.
-
-**Parte C: Revisar el estado consolidado de todas las reglas**
-
-10. En el panel izquierdo de Data Activator, expanda todos los objetos y revise el árbol completo. Debería tener una estructura similar a:
-
-```
-📦 Alertas_Operacionales_Ventas (Reflex)
-├── 📊 Objeto: Ventas_KPI_Total
-│   └── 📏 Propiedad: venta_total
-│       └── 🔔 Regla: Alerta_VentaTotal_Umbral_Minimo [ACTIVE]
-│           └── ✉️ Acción: Email
-├── 📊 Objeto: Ventas_Volumen_Transacciones  
-│   └── 📏 Propiedad: total_transacciones_hoy
-│       └── 🔔 Regla: Alerta_Volumen_Transacciones_Bajo [ACTIVE]
-│           ├── 💬 Acción: Teams
-│           └── ✉️ Acción: Email
-└── 📊 Objeto: Pipeline_Estado_Ingesta
-    └── 📏 Propiedad: pipeline_datos_recientes
-        └── 🔔 Regla: Alerta_Pipeline_Sin_Datos_Recientes [ACTIVE]
-            ├── ✉️ Acción: Email
-            └── ⚙️ Acción: Pipeline (si disponible)
-```
-
-11. Tome una captura de pantalla del árbol de objetos completo para incluirla en el runbook operativo.
-
-#### Salida esperada
-
-Tres objetos de monitoreo activos en Data Activator, cada uno con al menos una regla y una acción configurada. La estructura jerárquica Objeto → Propiedad → Regla → Acción está correctamente implementada.
-
-#### Verificación
-
-✅ Tres objetos de monitoreo visibles en Data Activator  
-✅ La regla de pipeline tiene acción de email configurada  
-✅ La acción de pipeline correctivo está configurada (o documentada la alternativa con Power Automate)  
-✅ Todas las reglas muestran estado **Active**  
+La regla aparece dentro de Activator y está en estado activo.
 
 ---
 
-### Paso 6: Simulación de escenarios de alerta y verificación end-to-end
+### Paso 6 - Probar la condición con datos existentes
 
-**Objetivo**: Simular las condiciones que disparan las alertas configuradas para verificar que el flujo completo de detección → notificación funciona correctamente en el sistema de observabilidad.
+**Objetivo:** validar que la regla usa una condición que se cumple.
 
 #### Instrucciones
 
-**Parte A: Simulación de alerta de ventas por debajo del umbral**
+1. Vuelve al reporte `Informe_Ventas_DirectLake`.
+2. Abre la página **Monitoreo**.
+3. Confirma que `KPI Dias Venta Baja` es mayor que cero.
+4. El valor esperado es `133`, por lo tanto la condición `133 > 0` es verdadera.
+5. En Activator, revisa si la regla indica condición satisfecha o próxima evaluación.
+6. Si hay botón de prueba o envío de prueba, úsalo.
+7. Espera unos minutos para la notificación.
 
-Para simular una condición de alerta sin modificar los datos reales, ajustaremos temporalmente el umbral de la regla a un valor que los datos actuales ya superan (o viceversa), forzando que la condición se cumpla.
+#### Resultado esperado
 
-1. En Data Activator, navegue a la regla **Alerta_VentaTotal_Umbral_Minimo**.
+La condición del visual es verdadera porque existen días con venta baja.
 
-2. Haga clic en **Edit** (Editar) en la regla.
+#### Validación
 
-3. Cambie temporalmente el umbral al valor **más alto** posible (por encima del valor actual de ventas), de modo que la condición `Becomes less than [umbral_alto]` se evalúe como verdadera con los datos actuales.
-
-   Por ejemplo, si las ventas actuales son 50,000, cambie el umbral a 999,999.
-
-4. Haga clic en **Save** y espere entre 2 y 5 minutos para que el motor de Data Activator evalúe la condición.
-
-5. Revise su **bandeja de entrada de email** para verificar la llegada de la notificación. El email debe incluir:
-   - Nombre de la regla disparada
-   - Valor detectado
-   - Hora de detección
-   - Enlace al informe o al Reflex
-
-6. Tome una captura de pantalla del email recibido.
-
-7. Una vez verificada la notificación, **restaure el umbral original** (el valor del 80% calculado en el Paso 1) y guarde.
-
-**Parte B: Verificación de la alerta de Teams**
-
-8. En Data Activator, navegue a la regla **Alerta_Volumen_Transacciones_Bajo**.
-
-9. Ajuste temporalmente el umbral de transacciones a un valor superior al actual (ej: si hay 500 transacciones, suba el umbral a 10,000).
-
-10. Guarde y espere 2-5 minutos.
-
-11. Revise el **canal o chat de Microsoft Teams** configurado para verificar la llegada del mensaje de alerta.
-
-12. Confirme que el mensaje contiene:
-    - El texto personalizado configurado en el Paso 4
-    - El valor detectado (`{value}` reemplazado por el valor real)
-    - La hora de detección
-
-13. Tome una captura de pantalla del mensaje de Teams recibido.
-
-14. **Restaure el umbral original** (100 transacciones) y guarde.
-
-**Parte C: Revisión del historial de alertas disparadas**
-
-15. En Data Activator, busque la sección de **Historial** o **History** en la barra superior o en el menú del artefacto.
-
-16. Revise el registro de eventos disparados durante la simulación. Debe mostrar:
-    - Fecha y hora de cada disparo
-    - Nombre de la regla
-    - Valor que causó el disparo
-    - Acción ejecutada y su estado (enviado/fallido)
-
-17. Exporte o anote la información del historial para incluirla en el runbook operativo.
-
-**Parte D: Verificación desde el Monitor Hub de Fabric**
-
-18. En el panel de navegación izquierdo de Fabric, busque el icono de **Monitor** (reloj o ícono de monitoreo) para acceder al **Monitor Hub**.
-
-19. En el Monitor Hub, revise las ejecuciones recientes del pipeline `Pipeline_Ingesta_Bronze` para confirmar que no fue activado accidentalmente durante las pruebas.
-
-20. Verifique también el estado de los items de Data Activator en el Monitor Hub.
-
-#### Salida esperada
-
-- Email recibido con detalles de la alerta de ventas simulada
-- Mensaje de Teams recibido con el texto personalizado y el valor detectado
-- Historial de Data Activator muestra los dos disparos de prueba con estado "Sent" (Enviado)
-- Monitor Hub no muestra ejecuciones no deseadas del pipeline
-
-#### Verificación
-
-✅ Email de alerta recibido con información correcta del evento  
-✅ Mensaje de Teams recibido con formato y contenido esperado  
-✅ Historial de Data Activator registra los eventos de prueba  
-✅ Umbrales restaurados a sus valores operacionales originales  
+No todos los tenants envían la notificación inmediatamente. La validación principal del laboratorio es que la regla queda creada y activa con una condición válida.
 
 ---
 
-### Paso 7: Documentación del Runbook Operativo
+### Paso 7 - Crear una segunda alerta opcional para venta alta
 
-**Objetivo**: Crear un documento de runbook operativo que describa el sistema de alertas implementado, los procedimientos de respuesta para cada tipo de alerta y las instrucciones de mantenimiento del sistema de observabilidad.
+**Objetivo:** practicar una condición complementaria.
+
+#### Instrucciones opcionales
+
+1. Selecciona la tarjeta `KPI Dias Venta Alta`.
+2. Crea una alerta con condición:
+
+   ```text
+   KPI Dias Venta Alta > 0
+   ```
+
+3. Guarda la alerta en el mismo Activator item.
+4. Configura notificación por email.
+
+#### Resultado esperado
+
+El Activator item contiene dos reglas:
+
+```text
+KPI Dias Venta Baja > 0
+KPI Dias Venta Alta > 0
+```
+
+---
+
+### Paso 8 - Revisar Monitor Hub y salud básica del flujo
+
+**Objetivo:** confirmar que la solución no solo tiene una alerta de negocio, sino también ejecuciones técnicas trazables.
 
 #### Instrucciones
 
-1. Abra un editor de texto (puede usar el Notebook de Fabric, Visual Studio Code o cualquier procesador de texto).
+1. En el menú izquierdo de Fabric, selecciona **Monitor** o **Monitoring hub**.
+2. Filtra por el workspace:
 
-2. Cree el runbook operativo con la siguiente estructura. Complete cada sección con la información específica de su implementación:
+   ```text
+   FABTRIAL_<alias>
+   ```
+
+3. Busca la ejecución más reciente del pipeline:
+
+   ```text
+   pl_01_ingesta_bronze
+   ```
+
+4. Abre el detalle y valida:
+
+   - Estado final.
+   - Hora de inicio.
+   - Duración.
+   - Actividades ejecutadas.
+   - Mensajes de error, si existen.
+
+5. Busca ejecuciones relacionadas con:
+
+   ```text
+   NB_02_Crear_Bronze
+   NB_03_Silver_Gold
+   pl_02_medallion_end_to_end
+   dfg_01_perfil_productos
+   ```
+
+6. Regresa al workspace y confirma que los artefactos críticos siguen disponibles:
+
+   ```text
+   lh_ventas_fuente
+   lh_ventas
+   pl_01_ingesta_bronze
+   NB_02_Crear_Bronze
+   NB_03_Silver_Gold
+   SM_Ventas_DirectLake
+   Informe_Ventas_DirectLake
+   ```
+
+#### Resultado esperado
+
+Puedes demostrar que las ejecuciones principales del taller existen, terminaron correctamente o tienen una causa documentada si hubo error.
+
+---
+
+### Paso 8A - Revisar integración opcional con Teams
+
+**Objetivo:** conocer la extensión, sin hacerla obligatoria.
+
+#### Instrucciones opcionales
+
+1. En la regla de Activator, busca **Add action**.
+2. Si aparece **Microsoft Teams**, selecciónalo.
+3. Configura un chat o canal permitido por tu organización.
+4. Guarda.
+5. Si Teams no aparece, no afecta el cumplimiento del laboratorio.
+
+#### Resultado esperado
+
+Teams queda configurado solo si el tenant lo permite.
+
+---
+
+### Paso 9 - Documentar runbook operativo
+
+**Objetivo:** convertir la alerta en un procedimiento operativo.
+
+#### Instrucciones
+
+Crea una nota o documento con esta estructura:
 
 ```markdown
-# RUNBOOK OPERATIVO: Sistema de Alertas Automáticas - FabricLakehouseLab
-## Versión: 1.0 | Fecha: [fecha actual] | Autor: [su nombre]
+# Runbook Operativo - Monitoreo de Ventas
 
----
+## 1. Objetivo
+Detectar días con venta baja o venta alta para revisión comercial temprana.
 
-## 1. RESUMEN EJECUTIVO
+## 2. Fuentes de datos
+- Lakehouse: lh_ventas
+- Tabla: gold_alertas_operativas
+- Modelo semántico: SM_Ventas_DirectLake
+- Reporte: Informe_Ventas_DirectLake
+- Activator: ACT_Monitoreo_Ventas
 
-Este runbook describe el sistema de monitoreo y alertas automáticas 
-implementado sobre la arquitectura Medallion de Microsoft Fabric para 
-el dataset de ventas. El sistema detecta automáticamente anomalías en 
-KPIs de negocio y métricas operacionales del pipeline, notificando al 
-equipo de ingeniería de datos sin intervención manual.
-
----
-
-## 2. INVENTARIO DE ALERTAS CONFIGURADAS
-
-| ID | Nombre de Alerta | Objeto Monitoreado | Condición | Umbral | Acción | Frecuencia |
-|----|---|---|---|---|---|---|
-| A01 | Alerta_VentaTotal_Umbral_Minimo | Visual Power BI - Venta Total | < umbral | [valor] | Email | [freq] |
-| A02 | Alerta_Volumen_Transacciones_Bajo | Visual Power BI - Transacciones | < 100 | 100 | Email + Teams | [freq] |
-| A03 | Alerta_Pipeline_Sin_Datos_Recientes | Visual Power BI - Pipeline Status | = 0 | 1 | Email + Pipeline | [freq] |
-
----
-
-## 3. PROCEDIMIENTOS DE RESPUESTA (PLAYBOOKS)
-
-### ALERTA A01: Ventas por debajo del umbral mínimo
-
-**Síntoma**: Email de alerta con asunto "Alerta_VentaTotal_Umbral_Minimo"
-**Causa probable**: 
-  - Datos no cargados en la última ejecución del pipeline
-  - Problema en la fuente de datos (archivos no llegaron)
-  - Día festivo o baja estacional normal
-
-**Pasos de respuesta**:
-1. Verificar el Monitor Hub para el estado del último run del pipeline
-2. Revisar los logs del Pipeline_Ingesta_Bronze en busca de errores
-3. Verificar disponibilidad de la fuente de datos (Azure Storage / archivos)
-4. Si el pipeline falló: ejecutar manualmente desde Fabric
-5. Si los datos son correctos pero bajos: escalar a negocio para análisis
-
-**Tiempo máximo de respuesta**: 2 horas
-**Escalación**: [nombre del responsable] si no se resuelve en 2 horas
-
----
-
-### ALERTA A02: Volumen de transacciones bajo
-
-**Síntoma**: Mensaje de Teams con texto "ALERTA OPERACIONAL: El volumen de transacciones..."
-**Causa probable**:
-  - Ingesta parcial de datos
-  - Problema de calidad en la capa Bronze (registros rechazados)
-  - Problema en la transformación Silver del Notebook
-
-**Pasos de respuesta**:
-1. Verificar el conteo de registros en bronze.ventas_raw vs silver_ventas
-2. Revisar el Notebook de transformación para errores en la última ejecución
-3. Verificar la vista vw_metricas_ventas_diarias para confirmar el valor
-4. Si hay discrepancia Bronze/Silver: re-ejecutar el Notebook de transformación
-5. Documentar el incidente en el log de operaciones
-
-**Tiempo máximo de respuesta**: 4 horas
-**Escalación**: [nombre del responsable]
-
----
-
-### ALERTA A03: Pipeline sin datos recientes
-
-**Síntoma**: Email con asunto "[CRÍTICO] Pipeline de ingesta sin ejecución..."
-**Causa probable**:
-  - Pipeline no programado correctamente
-  - Fallo silencioso en la ejecución del pipeline
-  - Problema de conectividad con la fuente de datos
-
-**Pasos de respuesta**:
-1. Verificar el Monitor Hub para confirmar la última ejecución
-2. Si el pipeline no ejecutó en 24h: ejecutar manualmente
-3. Verificar la programación (schedule) del pipeline
-4. Si hay error de conectividad: verificar credenciales y SAS tokens
-5. Si se activó el pipeline correctivo automáticamente: verificar su resultado
-
-**Tiempo máximo de respuesta**: 1 hora (crítico)
-**Escalación**: INMEDIATA si el pipeline no puede ejecutarse
-
----
-
-## 4. MANTENIMIENTO DEL SISTEMA DE ALERTAS
-
-### Revisión mensual recomendada:
-- [ ] Verificar que todos los umbrales siguen siendo relevantes para el negocio
-- [ ] Revisar el historial de alertas del mes anterior
-- [ ] Ajustar umbrales si los patrones de datos han cambiado (estacionalidad)
-- [ ] Verificar que los destinatarios de email/Teams siguen siendo correctos
-- [ ] Probar que las acciones de notificación siguen funcionando
-
-### Ajuste de umbrales:
-Los umbrales deben revisarse cada trimestre. Para ajustar:
-1. Navegar a Fabric > Workspace FabricLakehouseLab
-2. Abrir Alertas_Operacionales_Ventas (Reflex)
-3. Seleccionar la regla a modificar
-4. Editar el valor del umbral
-5. Guardar y verificar con una prueba controlada
-
----
-
-## 5. ARQUITECTURA DEL SISTEMA DE OBSERVABILIDAD
-
-[Incluir captura de pantalla del árbol de objetos de Data Activator]
-
-Fuentes de datos → Data Activator → Condiciones → Acciones
-Power BI Report → Objeto A01 → Venta < umbral → Email
-Power BI Report → Objeto A02 → Trans < 100 → Email + Teams  
-Power BI Report → Objeto A03 → Pipeline = 0 → Email + Pipeline
-
----
-
-## 6. CONTACTOS Y ESCALACIÓN
-
-| Rol | Nombre | Email | Teams |
+## 3. Reglas configuradas
+| Regla | Condición | Acción | Responsable |
 |---|---|---|---|
-| Ingeniero de Datos | [nombre] | [email] | [handle] |
-| Responsable de Negocio | [nombre] | [email] | [handle] |
-| Administrador de Fabric | [nombre] | [email] | [handle] |
+| A01 - Días con venta baja | KPI Dias Venta Baja > 0 | Email | Analista BI |
+| A02 - Días con venta alta | KPI Dias Venta Alta > 0 | Email opcional | Analista BI |
+
+## 4. Interpretación
+Venta baja indica días por debajo del umbral calculado con promedio menos desviación estándar.
+Venta alta indica días por encima del promedio más dos desviaciones estándar.
+
+## 5. Acción recomendada
+1. Abrir el reporte.
+2. Filtrar por días con alerta.
+3. Revisar región, canal y categoría.
+4. Confirmar si existe causa comercial, operativa o de datos.
+5. Registrar hallazgo.
+
+## 6. Monitoreo técnico
+Revisar en Monitor Hub que `pl_01_ingesta_bronze` y `pl_02_medallion_end_to_end` tengan ejecuciones recientes en estado Succeeded. Si falla un pipeline, abrir el detalle del run, identificar la actividad fallida y revisar logs antes de reejecutar.
+
+## 7. Escalación
+Si la alerta se repite durante tres días consecutivos o falla dos veces el mismo pipeline, escalar al responsable comercial o técnico según corresponda.
 ```
 
-3. Guarde el runbook con el nombre `Runbook_Alertas_Operacionales_v1.0.md` o `.docx`.
+#### Resultado esperado
 
-4. Si desea almacenarlo en Fabric, puede crear un **Notebook** en el Workspace con el contenido del runbook en celdas de tipo Markdown.
-
-#### Salida esperada
-
-Un documento de runbook completo con las secciones: inventario de alertas, procedimientos de respuesta para cada alerta, plan de mantenimiento y arquitectura del sistema. El documento está guardado localmente o en el Workspace de Fabric.
-
-#### Verificación
-
-✅ El runbook contiene las tres alertas configuradas con sus umbrales reales  
-✅ Cada alerta tiene un procedimiento de respuesta documentado  
-✅ El plan de mantenimiento incluye revisiones periódicas  
-✅ El documento está guardado y accesible  
+Tienes un runbook simple, conectado al sistema construido.
 
 ---
 
-## Validación y Pruebas del Laboratorio
+### Paso 10 - Validación final del taller completo
 
-Ejecute la siguiente lista de verificación completa para confirmar que el laboratorio fue completado exitosamente:
+**Objetivo:** comprobar que todos los capítulos están conectados.
 
-### Lista de verificación de validación final
+#### Instrucciones
 
-```
-VALIDACIÓN DEL LABORATORIO 05-00-01
-=====================================
-
-SECCIÓN 1: Artefactos de Fabric
-[ ] 1.1 Artefacto "Alertas_Operacionales_Ventas" (Reflex) existe en el Workspace
-[ ] 1.2 El Reflex contiene mínimo 2 objetos de monitoreo activos
-[ ] 1.3 Cada objeto tiene al menos 1 propiedad y 1 regla configurada
-[ ] 1.4 Al menos 1 regla tiene acción de Email configurada
-[ ] 1.5 Al menos 1 regla tiene acción de Teams configurada
-[ ] 1.6 Todas las reglas muestran estado "Active"
-
-SECCIÓN 2: Conexión con Power BI
-[ ] 2.1 Las alertas están conectadas al informe "Reporte_Ventas_Silver"
-[ ] 2.2 Los umbrales reflejan valores de negocio relevantes (no valores de prueba)
-[ ] 2.3 El informe de Power BI sigue funcionando correctamente después de los cambios
-
-SECCIÓN 3: Verificación de notificaciones
-[ ] 3.1 Email de alerta recibido durante la simulación del Paso 6
-[ ] 3.2 Mensaje de Teams recibido durante la simulación del Paso 6
-[ ] 3.3 El historial de Data Activator registra los eventos de prueba
-[ ] 3.4 Los umbrales fueron restaurados a valores operacionales después de las pruebas
-
-SECCIÓN 4: Documentación
-[ ] 4.1 Runbook operativo creado con las tres alertas documentadas
-[ ] 4.2 Cada alerta tiene procedimiento de respuesta definido
-[ ] 4.3 Captura de pantalla del árbol de objetos de Data Activator incluida
-
-SECCIÓN 5: Verificación de integridad del entorno
-[ ] 5.1 El Lakehouse "SalesLakehouse" sigue accesible con sus tablas Silver
-[ ] 5.2 El pipeline "Pipeline_Ingesta_Bronze" no fue ejecutado accidentalmente
-[ ] 5.3 El modelo semántico "Modelo_Ventas_DirectLake" sigue funcional
-[ ] 5.4 El Monitor Hub no muestra errores no esperados
-
-RESULTADO: _____ de 18 ítems completados
-APROBADO: 16/18 ítems mínimo requeridos
-```
-
-### Consulta de validación final en el Lakehouse
-
-Ejecute esta consulta en el SQL Analytics Endpoint para confirmar que los datos no fueron alterados durante el laboratorio:
+En el SQL endpoint de `lh_ventas`, ejecuta:
 
 ```sql
--- Validación final: integridad de datos post-laboratorio
-SELECT 
-    'Registros Silver Ventas'   AS metrica, 
-    COUNT(*)                    AS valor
-FROM silver_ventas
-
-UNION ALL
-
-SELECT 
-    'Registros Silver Productos' AS metrica, 
-    COUNT(*)                     AS valor
-FROM silver_productos
-
-UNION ALL
-
-SELECT 
-    'Días con datos (vista métricas)' AS metrica,
-    COUNT(DISTINCT fecha)             AS valor
-FROM vw_metricas_ventas_diarias;
+SELECT 'bronze_ventas' AS elemento, COUNT(*) AS filas FROM bronze_ventas
+UNION ALL SELECT 'silver_ventas', COUNT(*) FROM silver_ventas
+UNION ALL SELECT 'fact_ventas', COUNT(*) FROM fact_ventas
+UNION ALL SELECT 'gold_ventas_diarias', COUNT(*) FROM gold_ventas_diarias
+UNION ALL SELECT 'gold_ventas_mensuales', COUNT(*) FROM gold_ventas_mensuales
+UNION ALL SELECT 'gold_alertas_operativas', COUNT(*) FROM gold_alertas_operativas;
 ```
 
-Los valores deben ser consistentes con los verificados al inicio del laboratorio en el Paso 1.
+Luego revisa en el workspace que existan:
+
+```text
+lh_ventas_fuente
+lh_ventas
+NB_01_Verificar_OneLake
+NB_02_Crear_Bronze
+NB_03_Silver_Gold
+dfg_01_perfil_productos
+pl_01_ingesta_bronze
+pl_02_medallion_end_to_end
+SM_Ventas_DirectLake
+Informe_Ventas_DirectLake
+ACT_Monitoreo_Ventas o Activator item equivalente
+```
+![Taller completo](../images/Capitulo5/3.png)
+#### Resultado esperado
+
+Todos los artefactos existen y se puede explicar el flujo end-to-end.
 
 ---
 
-## Solución de Problemas
+## 8. Validación general del laboratorio
 
-### Problema 1: La opción "Set alert" no aparece en el visual de Power BI
-
-**Síntomas**:
-- Al hacer clic en los tres puntos (...) del visual en el informe publicado, la opción "Set alert" o "Configurar alerta" no aparece en el menú contextual
-- El menú solo muestra opciones como "Exportar datos", "Ver datos" o "Spotlight"
-
-**Causa**:
-Este problema ocurre por una de dos razones: (a) el informe se está visualizando en Power BI Desktop en lugar del servicio de Fabric en el navegador, o (b) el tipo de visual seleccionado no es compatible con alertas de Data Activator. Data Activator solo puede conectarse a visuals de tipo **Card (Tarjeta)**, **KPI** o **Gauge** que muestren un único valor numérico. Los visuals de tabla, matriz o gráficos de barras no soportan alertas directas.
-
-**Solución**:
-1. Confirme que está accediendo al informe a través del navegador en `app.fabric.microsoft.com`, no desde Power BI Desktop.
-2. Verifique que el visual seleccionado es de tipo **Card (Tarjeta)** o **KPI**. Si no tiene este tipo de visual en su informe, abra el informe en modo edición, agregue una tarjeta con la medida deseada, publique y luego intente nuevamente.
-3. Si el problema persiste, cree el Reflex directamente desde el Workspace (**+ New → Reflex**) y use la opción **Get data → Power BI** dentro de Data Activator para conectarlo manualmente al dataset, sin usar el atajo desde el visual.
-
----
-
-### Problema 2: Las notificaciones de alerta no llegan al email o Teams después de la simulación
-
-**Síntomas**:
-- La regla en Data Activator muestra estado "Active" y la condición debería estar cumpliéndose (umbral ajustado por encima del valor actual)
-- Han pasado más de 10 minutos desde el ajuste del umbral y no hay email ni mensaje de Teams
-- El historial de Data Activator no muestra ningún disparo reciente
-
-**Causa**:
-Existen tres causas comunes: (a) el intervalo de evaluación de Data Activator cuando la fuente es Power BI no es en tiempo real, sino por intervalos que pueden ser de 15 a 30 minutos dependiendo de la carga del tenant y la configuración; (b) el email o la cuenta de Teams usada para la acción no tiene permisos correctamente configurados en el tenant; (c) el dataset de Power BI no se ha actualizado desde que se ajustó el umbral, por lo que el valor que Data Activator está evaluando es el valor anterior al cambio.
-
-**Solución**:
-1. **Para el problema de latencia**: Espere al menos 15-20 minutos después de ajustar el umbral. El trial de Fabric tiene recursos compartidos que pueden aumentar la latencia de evaluación. Si después de 20 minutos no hay notificación, continúe con el laboratorio y documente la configuración como válida; la latencia no indica un error de configuración.
-2. **Para el problema de permisos de Teams**: Verifique que la cuenta usada en la acción de Teams tiene permisos para enviar mensajes al canal seleccionado. Si usa un canal de equipo (no chat personal), el bot de Fabric debe estar agregado al canal. Alternativamente, use el chat personal (1:1 con usted mismo) para las pruebas.
-3. **Para el problema de actualización del dataset**: En el informe de Power BI, haga clic en el botón de **Actualizar** (refresh) para forzar una actualización del dataset. Luego espere que Data Activator evalúe el nuevo valor. También puede verificar en la configuración de la regla si existe un botón de **Test** o **Preview** que permita ver el valor actual que Data Activator está leyendo.
-
----
-
-## Limpieza de Recursos
-
-> ⚠️ **INSTRUCCIÓN CRÍTICA**: Este es el **último laboratorio** de la serie. Después de completar este lab, puede proceder con la limpieza completa del entorno. **NO elimine recursos si planea revisar o demostrar el trabajo realizado** en los próximos días.
-
-### Limpieza al finalizar toda la serie de laboratorios
-
-Cuando esté listo para liberar la capacidad Trial de Fabric, siga estos pasos en orden:
-
-1. **Documentar antes de eliminar**: Exporte el runbook operativo y tome capturas de pantalla de todos los artefactos para su portafolio personal.
-
-2. **Desactivar las reglas de Data Activator** (para evitar notificaciones durante la limpieza):
-   - Abra `Alertas_Operacionales_Ventas` en Data Activator
-   - Para cada regla, cambie el estado a **Paused** o **Inactive**
-   - Esto evita recibir alertas espurias durante la eliminación de recursos
-
-3. **Eliminar el Workspace completo** (método recomendado — elimina todos los artefactos de una vez):
-   - Navegue a **Workspaces** en el panel izquierdo de Fabric
-   - Haga clic en los tres puntos (...) junto a **FabricLakehouseLab**
-   - Seleccione **Workspace settings** (Configuración del Workspace)
-   - En la sección inferior, haga clic en **Delete this workspace** (Eliminar este Workspace)
-   - Confirme la eliminación escribiendo el nombre del Workspace cuando se solicite
-   - Haga clic en **Delete**
-
-   > ⚠️ Esta acción es **irreversible** y eliminará permanentemente: el Lakehouse y todos sus datos, los pipelines, notebooks, modelos semánticos, informes de Power BI y el artefacto Data Activator.
-
-4. **Verificar la liberación de capacidad**:
-   - Navegue a **[Portal de administración de Fabric](https://app.fabric.microsoft.com/admin-portal)**
-   - Verifique que la capacidad Trial muestra los recursos liberados
-
-5. **Limpieza opcional de recursos externos** (si aplica):
-   - Si creó un Azure Storage Account durante los labs, elimínelo desde el Portal de Azure
-   - Revoque cualquier SAS Token que haya compartido durante el curso
-
----
-
-## Resumen del Laboratorio
-
-### Logros alcanzados
-
-En este laboratorio completó la implementación de un sistema completo de observabilidad operacional sobre la arquitectura Medallion de Microsoft Fabric. Los logros concretos incluyen:
-
-| Logro | Artefacto creado |
+| Validación | Estado |
 |---|---|
-| Sistema de monitoreo de KPIs de negocio | Reflex `Alertas_Operacionales_Ventas` |
-| Alerta de ventas por debajo del umbral | Regla `Alerta_VentaTotal_Umbral_Minimo` |
-| Alerta de volumen de transacciones bajo | Regla `Alerta_Volumen_Transacciones_Bajo` |
-| Alerta de pipeline sin datos recientes | Regla `Alerta_Pipeline_Sin_Datos_Recientes` |
-| Notificaciones automáticas por email | Acciones de email en 3 reglas |
-| Notificaciones automáticas por Teams | Acción de Teams en regla A02 |
-| Documentación operacional | Runbook `Runbook_Alertas_Operacionales_v1.0` |
-
-### Arquitectura Medallion completa: ciclo cerrado
-
-Con este laboratorio, la arquitectura completa implementada a lo largo de los cinco labs queda así:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                 ARQUITECTURA MEDALLION COMPLETA                      │
-│                                                                      │
-│  [Lab 01]          [Lab 02]         [Lab 03]                         │
-│  Lakehouse    →    Pipeline    →    Notebook                         │
-│  OneLake           Bronze           PySpark/SQL                      │
-│  Shortcuts         Ingesta          Bronze → Silver                  │
-│                                                                      │
-│                    [Lab 04]         [Lab 05]                         │
-│                    Modelo      →    Data Activator                   │
-│                    Direct Lake      Alertas Automáticas              │
-│                    Power BI         Email + Teams + Pipeline         │
-│                                                                      │
-│  ◄──────────── CICLO OPERATIVO COMPLETO ────────────────────────►   │
-│   Ingestar → Transformar → Visualizar → Monitorear → Reaccionar     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Conceptos clave reforzados
-
-- **Data Activator** opera sobre tres pilares: **Objeto** (qué se monitorea), **Propiedad** (qué se mide) y **Regla** (cuándo y cómo se actúa)
-- La conexión desde **visuals de Power BI** es el camino más rápido para implementar alertas sobre KPIs de negocio existentes
-- Las **acciones de respuesta** escalan desde notificaciones simples (email, Teams) hasta automatizaciones complejas (pipelines, Power Automate)
-- Un **runbook operativo** es el complemento indispensable de cualquier sistema de alertas: define qué hacer cuando la alerta se dispara
-- La **simulación controlada** de alertas es la única forma de verificar el funcionamiento end-to-end antes de pasar a producción
-
-### Recursos de referencia adicionales
-
-| Recurso | URL |
-|---|---|
-| Documentación oficial de Data Activator | [learn.microsoft.com/fabric/data-activator](https://learn.microsoft.com/es-es/fabric/data-activator/data-activator-introduction) |
-| Alertas desde Power BI con Data Activator | [learn.microsoft.com — get-data-power-bi](https://learn.microsoft.com/es-es/fabric/data-activator/data-activator-get-data-power-bi) |
-| Integración con Power Automate | [learn.microsoft.com — power-automate-flows](https://learn.microsoft.com/es-es/fabric/data-activator/data-activator-trigger-power-automate-flows) |
-| Eventstream en Microsoft Fabric | [learn.microsoft.com — eventstreams overview](https://learn.microsoft.com/es-es/fabric/real-time-intelligence/event-streams/overview) |
-| Monitoreo en tiempo real con Fabric | [learn.microsoft.com — real-time-intelligence](https://learn.microsoft.com/es-es/fabric/real-time-intelligence/overview) |
+| `gold_alertas_operativas` tiene datos. | ☐ |
+| El reporte tiene página Monitoreo. | ☐ |
+| La tarjeta `KPI Dias Venta Baja` muestra valor mayor a cero. | ☐ |
+| Se intentó crear alerta desde Power BI. | ☐ |
+| Existe regla activa o se aplicó la validación alternativa indicada. | ☐ |
+| Se creó runbook operativo. | ☐ |
+| Se revisó Monitor Hub y se documentó salud básica del flujo. | ☐ |
+| Se validó el flujo completo desde Bronze hasta Power BI. | ☐ |
 
 ---
 
-> 🎓 **¡Felicitaciones!** Ha completado exitosamente los cinco laboratorios de la serie. Ha implementado una arquitectura Medallion completa en Microsoft Fabric, desde la ingesta de datos en la capa Bronze hasta el monitoreo automatizado con alertas basadas en eventos. Este es el ciclo completo de ingeniería de datos moderna: **ingestar, transformar, modelar, visualizar y observar**.
+## 9. Errores frecuentes y solución
+
+### Problema 1 - No aparece `ACT_Monitoreo_Ventas`
+
+**Causa probable:** Power BI creó un Activator item con nombre automático.
+
+**Solución:** busca en el workspace elementos de tipo Activator o Reflex. Abre el más reciente y verifica si contiene la regla.
+
+---
+
+### Problema 2 - La alerta no envía email inmediatamente
+
+**Causa probable:** frecuencia de evaluación, configuración de notificaciones o políticas del tenant.
+
+**Solución:** valida primero que la regla está activa. Revisa spam, bandeja de otros, y políticas de notificación. No repitas reglas innecesariamente.
+
+---
+
+### Problema 3 - La medida `KPI Dias Venta Baja` muestra cero
+
+**Causa probable:** filtros activos en reporte.
+
+**Solución:** limpia filtros de página y reporte. Verifica la tabla `gold_alertas_operativas` con SQL.
+
+---
+
+### Problema 4 - Teams no aparece como acción
+
+**Causa probable:** integración no habilitada o permisos insuficientes.
+
+**Solución:** usa email. Teams es opcional.
+
+---
+
+## 10. Validación de cierre
+
+Antes de finalizar el taller, confirma:
+
+1. La consulta SQL de estados de alerta devuelve los valores esperados.
+2. La página **Monitoreo** del reporte está disponible.
+3. La tarjeta `KPI Dias Venta Baja` muestra un valor mayor a cero.
+4. La regla en Activator quedó creada o se aplicó la validación alternativa indicada.
+5. El runbook operativo está definido.
+6. Monitor Hub muestra ejecuciones de notebooks, Dataflow Gen2 o pipelines revisadas.
+7. La consulta final del flujo completo devuelve resultados esperados.
+
+---
+
+## 11. Cierre del laboratorio
+
+Completaste el ciclo de la arquitectura moderna en Microsoft Fabric: datos en OneLake, ingesta orquestada, transformación Medallion, modelo Direct Lake, reporte Power BI, monitoreo técnico básico y monitoreo de negocio con alertas. El taller queda alineado con una experiencia manual y práctica basada en los artefactos de Fabric creados durante los laboratorios.
+
+---
+
+## 12. Preguntas de reflexión
+
+1. ¿Qué diferencia hay entre monitorear una tabla del Lakehouse y monitorear un visual de Power BI?
+2. ¿Por qué `KPI Dias Venta Baja > 0` es una condición útil para validar Activator en un taller?
+3. ¿Qué alertas serían más relevantes en un entorno real?
+4. ¿Qué diferencia hay entre revisar un error en Monitor Hub y crear una alerta de negocio en Activator?
+4. ¿Qué parte del proceso automatizarías con Power Automate si estuviera disponible?
+5. ¿Qué señales revisarías en Monitor Hub antes de investigar un problema de datos?
+6. ¿Qué limitaciones del tenant deben documentarse antes de impartir el taller?
+
